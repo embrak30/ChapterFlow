@@ -1,0 +1,902 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ChapterFlow Preview</title>
+    <style>
+      :root {
+        --bg: #f6f7f9;
+        --panel: #ffffff;
+        --ink: #18202f;
+        --muted: #667085;
+        --line: #dde2ea;
+        --brand: #235c88;
+        --brand-dark: #184766;
+        --good: #167a4a;
+        --warn: #9a5b00;
+        --bad: #b42318;
+        --info: #175cd3;
+        --shadow: 0 12px 30px rgba(24, 32, 47, 0.08);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        background: var(--bg);
+        color: var(--ink);
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+        margin: 0;
+      }
+
+      button,
+      input,
+      select,
+      textarea {
+        font: inherit;
+      }
+
+      button {
+        background: #ffffff;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        color: var(--ink);
+        cursor: pointer;
+        font-weight: 700;
+        padding: 0.72rem 0.9rem;
+      }
+
+      button.primary {
+        background: var(--brand);
+        border-color: var(--brand);
+        color: #ffffff;
+      }
+
+      main {
+        min-height: 100vh;
+        padding: 1.25rem;
+      }
+
+      .topbar {
+        align-items: center;
+        display: flex;
+        gap: 1rem;
+        justify-content: space-between;
+        margin: 0 auto 1.25rem;
+        max-width: 1500px;
+      }
+
+      h1,
+      h2,
+      p {
+        margin: 0;
+      }
+
+      h1 {
+        font-size: clamp(2rem, 4vw, 3.35rem);
+        line-height: 1;
+      }
+
+      h2 {
+        font-size: 1.1rem;
+        line-height: 1.25;
+      }
+
+      .eyebrow {
+        color: var(--brand);
+        font-size: 0.74rem;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        margin-bottom: 0.4rem;
+        text-transform: uppercase;
+      }
+
+      .role-switch {
+        background: #e9eef5;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        display: flex;
+        padding: 0.25rem;
+      }
+
+      .role-switch button {
+        background: transparent;
+        border: 0;
+      }
+
+      .role-switch button.active {
+        background: #ffffff;
+        box-shadow: 0 5px 16px rgba(24, 32, 47, 0.12);
+      }
+
+      .workspace {
+        display: none;
+        gap: 1rem;
+        grid-template-columns: minmax(230px, 0.8fr) minmax(520px, 1.6fr) minmax(320px, 1fr);
+        margin: 0 auto;
+        max-width: 1500px;
+      }
+
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        box-shadow: var(--shadow);
+        padding: 1rem;
+      }
+
+      .section-heading {
+        margin-bottom: 1rem;
+      }
+
+      .stat-grid,
+      .author-grid {
+        display: grid;
+        gap: 0.6rem;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .stat {
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        padding: 0.75rem;
+      }
+
+      .stat strong {
+        display: block;
+        font-size: 1.5rem;
+        line-height: 1;
+      }
+
+      .stat span,
+      .muted,
+      .email-draft p {
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+
+      .stage-list {
+        display: grid;
+        gap: 0.45rem;
+        margin-top: 1rem;
+      }
+
+      .stage {
+        align-items: center;
+        border-top: 1px solid var(--line);
+        display: flex;
+        justify-content: space-between;
+        padding: 0.65rem 0;
+      }
+
+      .stage span {
+        font-weight: 700;
+      }
+
+      .stage small {
+        color: var(--muted);
+      }
+
+      .chapter-table {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        overflow: hidden;
+      }
+
+      .table-row {
+        align-items: center;
+        background: #ffffff;
+        border: 0;
+        border-bottom: 1px solid var(--line);
+        border-radius: 0;
+        display: grid;
+        gap: 0.8rem;
+        grid-template-columns: 1.45fr 0.9fr 0.8fr 0.85fr 0.65fr;
+        min-width: 760px;
+        padding: 0.85rem;
+        text-align: left;
+        width: 100%;
+      }
+
+      .table-panel {
+        overflow-x: auto;
+      }
+
+      .table-head {
+        background: #f2f5f8;
+        color: var(--muted);
+        font-size: 0.78rem;
+        font-weight: 800;
+        text-transform: uppercase;
+      }
+
+      .table-row.selected,
+      .table-row:hover {
+        background: #f5fbff;
+      }
+
+      .pill {
+        border-radius: 999px;
+        display: inline-flex;
+        font-size: 0.78rem;
+        font-weight: 800;
+        justify-content: center;
+        padding: 0.28rem 0.55rem;
+        width: fit-content;
+      }
+
+      .pending-review,
+      .submitted {
+        background: #e8f1ff;
+        color: var(--info);
+      }
+
+      .approved,
+      .complete {
+        background: #e7f6ee;
+        color: var(--good);
+      }
+
+      .revision-requested,
+      .overdue {
+        background: #fff3dc;
+        color: var(--warn);
+      }
+
+      .rejected {
+        background: #fee4e2;
+        color: var(--bad);
+      }
+
+      .meta-list {
+        display: grid;
+        gap: 0.55rem;
+        margin-bottom: 1rem;
+      }
+
+      .meta-list p {
+        color: var(--muted);
+        display: flex;
+        gap: 0.4rem;
+        justify-content: space-between;
+      }
+
+      .meta-list strong {
+        color: var(--ink);
+      }
+
+      .document-preview {
+        background: #f2f5f8;
+        border: 1px dashed #aeb9c8;
+        border-radius: 8px;
+        display: grid;
+        gap: 0.75rem;
+        margin-bottom: 1rem;
+        min-height: 190px;
+        padding: 1rem;
+      }
+
+      .document-preview span {
+        color: var(--brand);
+        font-weight: 800;
+      }
+
+      label {
+        display: grid;
+        gap: 0.45rem;
+        font-size: 0.88rem;
+        font-weight: 800;
+        margin-bottom: 0.9rem;
+      }
+
+      input,
+      select,
+      textarea {
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        color: var(--ink);
+        padding: 0.78rem 0.85rem;
+        width: 100%;
+      }
+
+      textarea {
+        min-height: 110px;
+        resize: vertical;
+      }
+
+      .email-draft {
+        background: #f7fafc;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        display: grid;
+        gap: 0.55rem;
+        margin-bottom: 1rem;
+        padding: 0.85rem;
+      }
+
+      .author-view {
+        display: none;
+        gap: 1rem;
+        margin: 0 auto;
+        max-width: 1120px;
+      }
+
+      .public-view {
+        display: grid;
+        gap: 1rem;
+        margin: 0 auto;
+        max-width: 1180px;
+      }
+
+      .intro-band {
+        background: #dfeaf3;
+        border: 1px solid #c5d7e6;
+        border-radius: 8px;
+        display: grid;
+        gap: 0.8rem;
+        padding: clamp(1rem, 3vw, 2rem);
+      }
+
+      .intro-band h2 {
+        font-size: clamp(1.6rem, 3vw, 2.7rem);
+        max-width: 900px;
+      }
+
+      .intro-band p:not(.eyebrow) {
+        color: #344054;
+        max-width: 760px;
+      }
+
+      .call-grid {
+        display: grid;
+        gap: 1rem;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .call-card {
+        display: grid;
+        gap: 1rem;
+      }
+
+      .call-card .pill {
+        margin-bottom: 0.8rem;
+      }
+
+      .call-details {
+        background: #f7fafc;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        color: var(--muted);
+        display: grid;
+        gap: 0.55rem;
+        padding: 0.85rem;
+      }
+
+      .call-details p {
+        color: var(--muted);
+      }
+
+      .call-details strong {
+        color: var(--ink);
+      }
+
+      .call-details ul {
+        margin: 0;
+        padding-left: 1.15rem;
+      }
+
+      .call-details li + li {
+        margin-top: 0.45rem;
+      }
+
+      .date-strip {
+        display: grid;
+        gap: 0.6rem;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .date-strip span {
+        background: #f7fafc;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        color: var(--muted);
+        display: grid;
+        gap: 0.25rem;
+        padding: 0.7rem;
+      }
+
+      .date-strip strong {
+        color: var(--ink);
+      }
+
+      .registration-panel {
+        display: grid;
+        gap: 0.25rem;
+      }
+
+      .form-grid {
+        display: grid;
+        gap: 0.8rem;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .author-summary {
+        align-items: center;
+        display: flex;
+        gap: 1rem;
+        justify-content: space-between;
+      }
+
+      .profile-card {
+        background: #fbfdff;
+      }
+
+      .notice {
+        background: #e7f6ee;
+        border: 1px solid #b7dfc7;
+        border-radius: 7px;
+        color: var(--good);
+        display: none;
+        font-size: 0.9rem;
+        font-weight: 700;
+        margin-top: 0.85rem;
+        padding: 0.75rem;
+      }
+
+      .timeline ol {
+        color: var(--muted);
+        margin: 0;
+        padding-left: 1.25rem;
+      }
+
+      .timeline li + li {
+        margin-top: 0.7rem;
+      }
+
+      @media (max-width: 1180px) {
+        .workspace {
+          grid-template-columns: 1fr;
+        }
+
+        .sidebar {
+          display: grid;
+          gap: 1rem;
+          grid-template-columns: 1fr 1fr;
+        }
+      }
+
+      @media (max-width: 760px) {
+        main {
+          padding: 0.75rem;
+        }
+
+        .topbar,
+        .author-summary {
+          align-items: stretch;
+          flex-direction: column;
+        }
+
+        .role-switch {
+          width: 100%;
+        }
+
+        .role-switch button {
+          flex: 1;
+        }
+
+        .sidebar,
+        .author-grid,
+        .call-grid,
+        .form-grid,
+        .date-strip {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Edited book management</p>
+          <h1>ChapterFlow</h1>
+        </div>
+        <div class="role-switch" aria-label="Choose preview role">
+          <button class="active" id="publicButton">Public</button>
+          <button id="editorButton">Editor</button>
+          <button id="authorButton">Author</button>
+        </div>
+      </header>
+
+      <section class="public-view" id="publicView">
+        <div class="intro-band">
+          <p class="eyebrow">Welcome to ChapterFlow</p>
+          <h2>Find your edited-book project, register, and follow each submission stage from one profile.</h2>
+          <p>
+            Contributors can browse open calls, choose the project they are joining, and begin with a short chapter
+            proposal. Editors manage decisions, deadlines, documents, and the final manuscript package.
+          </p>
+        </div>
+
+        <div class="call-grid">
+          <article class="panel call-card">
+            <div>
+              <span class="pill submitted">Open</span>
+              <p class="eyebrow">Call for chapter proposals</p>
+              <h2>LYIS Leadership With Mission Integrity</h2>
+            </div>
+            <p class="muted">
+              LYIS members are invited to submit personal leadership chapter proposals that support the mission and
+              values of LYIS and reflect next year's conference theme: leading with mission integrity.
+            </p>
+            <div class="call-details">
+              <p><strong>12 chapters + 2 reserve spaces</strong></p>
+              <p>In print February next year</p>
+              <ul>
+                <li>Open to current LYIS members.</li>
+                <li>Chapters should be personal leadership accounts written in the author's own voice.</li>
+                <li>There are 12 chapter spaces available, with two reserve spaces.</li>
+                <li>Authors must be able to meet the project deadlines and participate in promoting the publication.</li>
+                <li>Selected chapters may also be considered for journal publication or presentation at the LYIS conference next March.</li>
+              </ul>
+            </div>
+            <div class="date-strip">
+              <span><strong>Proposal</strong>28 Jun 2026</span>
+              <span><strong>First draft</strong>15 Jul 2026</span>
+              <span><strong>Final</strong>01 Oct 2026</span>
+            </div>
+            <button class="primary go-author" data-project="public-scholarship">Register for this call</button>
+          </article>
+
+          <article class="panel call-card">
+            <div>
+              <span class="pill pending-review">Opening soon</span>
+              <p class="eyebrow">Expressions of interest</p>
+              <h2>Digital Methods for Social Change</h2>
+            </div>
+            <p class="muted">
+              A planned edited collection on digital tools, civic participation, and applied social research.
+            </p>
+            <div class="date-strip">
+              <span><strong>Proposal</strong>10 Aug 2026</span>
+              <span><strong>First draft</strong>15 Oct 2026</span>
+              <span><strong>Final</strong>15 Jan 2027</span>
+            </div>
+            <button class="go-author" data-project="digital-methods">Register interest</button>
+          </article>
+        </div>
+
+        <section class="panel registration-panel">
+          <div class="section-heading">
+            <p class="eyebrow">Registration preview</p>
+            <h2>Create your contributor profile</h2>
+          </div>
+          <div class="form-grid">
+            <label>Full name<input id="regName" value="Dr Priya Nair" /></label>
+            <label>Email<input id="regEmail" value="priya.nair@example.com" /></label>
+            <label>
+              Project
+              <select id="regProject">
+                <option value="public-scholarship">LYIS Leadership With Mission Integrity</option>
+                <option value="digital-methods">Digital Methods for Social Change</option>
+              </select>
+            </label>
+            <label>
+              Role
+              <select>
+                <option>Author / contributor</option>
+                <option>Editor</option>
+              </select>
+            </label>
+          </div>
+          <button class="go-author">Continue to profile</button>
+        </section>
+      </section>
+
+      <section class="workspace" id="editorView">
+        <aside class="panel sidebar">
+          <div>
+            <div class="section-heading">
+              <p class="eyebrow">Current book</p>
+              <h2>LYIS Leadership With Mission Integrity</h2>
+            </div>
+            <div class="stat-grid">
+              <div class="stat"><strong>4</strong><span>Active chapters</span></div>
+              <div class="stat"><strong>2</strong><span>Awaiting review</span></div>
+              <div class="stat"><strong>1</strong><span>Revisions requested</span></div>
+              <div class="stat"><strong>1</strong><span>Overdue</span></div>
+            </div>
+          </div>
+          <div class="stage-list">
+            <div class="stage"><span>Proposal</span><small>Author</small></div>
+            <div class="stage"><span>Proposal revision</span><small>Editor</small></div>
+            <div class="stage"><span>First draft</span><small>Author</small></div>
+            <div class="stage"><span>Second draft</span><small>Author</small></div>
+            <div class="stage"><span>Final materials</span><small>Author</small></div>
+            <div class="stage"><span>Complete</span><small>Editor</small></div>
+          </div>
+        </aside>
+
+        <section class="panel table-panel">
+          <div class="section-heading">
+            <p class="eyebrow">Submissions</p>
+            <h2>Editorial Review Board</h2>
+          </div>
+          <div class="chapter-table">
+            <div class="table-row table-head">
+              <span>Chapter</span><span>Author</span><span>Stage</span><span>Status</span><span>Deadline</span>
+            </div>
+            <button class="table-row selected">
+              <span>Community Archives and Public Memory</span><span>Dr Amara Lewis</span><span>First draft</span
+              ><span class="pill submitted">Submitted</span><span>15 Jul 2026</span>
+            </button>
+            <button class="table-row">
+              <span>Digital Tools for Participatory Research</span><span>Prof Malik Stone</span><span>Proposal</span
+              ><span class="pill pending-review">Pending review</span><span>28 Jun 2026</span>
+            </button>
+            <button class="table-row">
+              <span>Ethics, Consent, and Shared Authority</span><span>Dr Priya Nair</span><span>Second draft</span
+              ><span class="pill revision-requested">Revision requested</span><span>01 Jul 2026</span>
+            </button>
+            <button class="table-row">
+              <span>Building the Final Manuscript as a Collective Text</span><span>Dr Theo Bennett</span
+              ><span>Final materials</span><span class="pill overdue">Overdue</span><span>14 Jun 2026</span>
+            </button>
+          </div>
+        </section>
+
+        <aside class="panel">
+          <div class="section-heading">
+            <p class="eyebrow">Review</p>
+            <h2>Community Archives and Public Memory</h2>
+          </div>
+          <div class="meta-list">
+            <p><strong>Author</strong>Dr Amara Lewis</p>
+            <p><strong>Submitted</strong>17 Jun 2026</p>
+            <p><strong>Latest file</strong>lewis-first-draft.pdf</p>
+          </div>
+          <div class="document-preview">
+            <span>PDF / DOCX preview</span>
+            <p>
+              Examines how community-led archives reshape public memory and broaden participation in historical
+              record-making.
+            </p>
+          </div>
+          <label>
+            Decision
+            <select>
+              <option>Revision requested</option>
+              <option>Approved</option>
+              <option>Rejected</option>
+              <option>Complete</option>
+            </select>
+          </label>
+          <label>
+            Editor comment
+            <textarea>Thank you for the submission. Please strengthen the chapter structure and return the next version by the deadline.</textarea>
+          </label>
+          <div class="email-draft">
+            <strong>Editorial feedback on your submission</strong>
+            <p>
+              Thank you for your submission. We would like you to revise the chapter using the comments below before
+              the next deadline.
+            </p>
+            <p>
+              Thank you for the submission. Please strengthen the chapter structure and return the next version by the
+              deadline.
+            </p>
+          </div>
+          <button class="primary">Approve email and update status</button>
+        </aside>
+      </section>
+
+      <section class="author-view" id="authorView">
+        <div class="panel author-summary">
+          <div>
+            <p class="eyebrow">Author dashboard</p>
+            <h2 id="authorProjectTitle">LYIS Leadership With Mission Integrity</h2>
+            <p>
+              Signed in as <strong id="authorName">Dr Priya Nair</strong> for
+              <strong id="authorCallType">call for chapter proposals</strong>
+            </p>
+          </div>
+          <span class="pill pending-review" id="proposalStatus">Proposal not submitted</span>
+        </div>
+
+        <div class="author-grid">
+          <section class="panel profile-card">
+            <div class="section-heading">
+              <p class="eyebrow">Contributor profile</p>
+              <h2 id="profileName">Dr Priya Nair</h2>
+            </div>
+            <div class="meta-list">
+              <p><strong>Email</strong><span id="profileEmail">priya.nair@example.com</span></p>
+              <p><strong>Project</strong><span id="profileProject">LYIS Leadership With Mission Integrity</span></p>
+              <p><strong>Role</strong>Author / contributor</p>
+            </div>
+          </section>
+
+          <section class="panel timeline">
+            <div class="section-heading">
+              <p class="eyebrow">Project dates</p>
+              <h2>Submission timeline</h2>
+            </div>
+            <ol>
+              <li><strong>Proposal due</strong> <span id="proposalDue">28 Jun 2026</span></li>
+              <li><strong>Proposal decisions</strong> <span id="decisionDate">05 Jul 2026</span></li>
+              <li><strong>First draft due</strong> <span id="firstDraftDue">15 Jul 2026</span></li>
+              <li><strong>Second draft due</strong> <span id="secondDraftDue">30 Aug 2026</span></li>
+              <li><strong>Final materials due</strong> <span id="finalDue">01 Oct 2026</span></li>
+            </ol>
+          </section>
+
+          <section class="panel">
+            <div class="section-heading">
+              <p class="eyebrow">First action</p>
+              <h2>Submit chapter proposal</h2>
+            </div>
+            <p class="muted">Start with a title and short text proposal. Once approved, this panel becomes your first draft upload.</p>
+            <label>Proposed chapter title<input id="proposalTitle" value="Ethics, Consent, and Shared Authority" /></label>
+            <label>
+              Proposal summary
+              <textarea id="proposalSummary">Explores ethical responsibilities in edited collections that include practitioner and community voices.</textarea>
+            </label>
+            <button class="primary" id="submitProposal">Submit proposal</button>
+            <div class="notice" id="submissionNotice">
+              Your proposal is now awaiting editor review. When approved, your next action will change to first draft upload.
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="section-heading">
+              <p class="eyebrow">Profile</p>
+              <h2>Biography and abstract</h2>
+            </div>
+            <label>
+              Chapter abstract
+              <textarea id="chapterAbstract">Explores ethical responsibilities in edited collections that include practitioner and community voices.</textarea>
+            </label>
+            <label>
+              Author biography
+              <textarea>Priya Nair is an ethics adviser and researcher working across education, heritage, and policy.</textarea>
+            </label>
+            <button>Save profile details</button>
+          </section>
+
+          <section class="panel">
+            <div class="section-heading">
+              <p class="eyebrow">After approval</p>
+              <h2>Draft upload area</h2>
+            </div>
+            <p class="muted">
+              This unlocks after an editor approves the proposal. It will hold first, second, and final draft submissions.
+            </p>
+            <label>Draft file<input type="file" /></label>
+            <label>
+              Notes for editor
+              <textarea placeholder="Add any context for the uploaded draft."></textarea>
+            </label>
+            <button>Upload draft</button>
+          </section>
+
+          <section class="panel timeline">
+            <div class="section-heading">
+              <p class="eyebrow">History</p>
+              <h2>Feedback timeline</h2>
+            </div>
+            <ol>
+              <li>Proposal approved by editor</li>
+              <li>First draft submitted</li>
+              <li>Revision requested: Ask for a shorter introduction and fuller conclusion.</li>
+            </ol>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      const publicButton = document.querySelector("#publicButton");
+      const editorButton = document.querySelector("#editorButton");
+      const authorButton = document.querySelector("#authorButton");
+      const publicView = document.querySelector("#publicView");
+      const editorView = document.querySelector("#editorView");
+      const authorView = document.querySelector("#authorView");
+      const regName = document.querySelector("#regName");
+      const regEmail = document.querySelector("#regEmail");
+      const regProject = document.querySelector("#regProject");
+      const authorProjectTitle = document.querySelector("#authorProjectTitle");
+      const authorName = document.querySelector("#authorName");
+      const authorCallType = document.querySelector("#authorCallType");
+      const profileName = document.querySelector("#profileName");
+      const profileEmail = document.querySelector("#profileEmail");
+      const profileProject = document.querySelector("#profileProject");
+      const proposalStatus = document.querySelector("#proposalStatus");
+      const proposalDue = document.querySelector("#proposalDue");
+      const decisionDate = document.querySelector("#decisionDate");
+      const firstDraftDue = document.querySelector("#firstDraftDue");
+      const secondDraftDue = document.querySelector("#secondDraftDue");
+      const finalDue = document.querySelector("#finalDue");
+      const submitProposal = document.querySelector("#submitProposal");
+      const submissionNotice = document.querySelector("#submissionNotice");
+
+      const projects = {
+        "public-scholarship": {
+          title: "LYIS Leadership With Mission Integrity",
+          type: "call for chapter proposals",
+          proposal: "28 Jun 2026",
+          decision: "05 Jul 2026",
+          first: "15 Jul 2026",
+          second: "30 Aug 2026",
+          final: "01 Oct 2026"
+        },
+        "digital-methods": {
+          title: "Digital Methods for Social Change",
+          type: "expressions of interest",
+          proposal: "10 Aug 2026",
+          decision: "24 Aug 2026",
+          first: "15 Oct 2026",
+          second: "01 Dec 2026",
+          final: "15 Jan 2027"
+        }
+      };
+
+      function setView(view) {
+        publicView.style.display = view === "public" ? "grid" : "none";
+        editorView.style.display = view === "editor" ? "grid" : "none";
+        authorView.style.display = view === "author" ? "grid" : "none";
+        publicButton.classList.toggle("active", view === "public");
+        editorButton.classList.toggle("active", view === "editor");
+        authorButton.classList.toggle("active", view === "author");
+      }
+
+      function syncAuthorProfile(projectId) {
+        const project = projects[projectId] || projects["public-scholarship"];
+        regProject.value = projectId;
+        authorProjectTitle.textContent = project.title;
+        authorName.textContent = regName.value || "Contributor";
+        authorCallType.textContent = project.type;
+        profileName.textContent = regName.value || "Contributor";
+        profileEmail.textContent = regEmail.value || "No email added";
+        profileProject.textContent = project.title;
+        proposalDue.textContent = project.proposal;
+        decisionDate.textContent = project.decision;
+        firstDraftDue.textContent = project.first;
+        secondDraftDue.textContent = project.second;
+        finalDue.textContent = project.final;
+      }
+
+      function goAuthor(projectId) {
+        syncAuthorProfile(projectId || regProject.value);
+        proposalStatus.textContent = "Proposal not submitted";
+        proposalStatus.className = "pill pending-review";
+        submitProposal.textContent = "Submit proposal";
+        submissionNotice.style.display = "none";
+        setView("author");
+      }
+
+      publicButton.addEventListener("click", () => setView("public"));
+      editorButton.addEventListener("click", () => {
+        setView("editor");
+      });
+
+      authorButton.addEventListener("click", () => {
+        goAuthor(regProject.value);
+      });
+
+      document.querySelectorAll(".go-author").forEach((button) => {
+        button.addEventListener("click", () => goAuthor(button.dataset.project));
+      });
+
+      submitProposal.addEventListener("click", () => {
+        proposalStatus.textContent = "Proposal submitted";
+        proposalStatus.className = "pill submitted";
+        submitProposal.textContent = "Proposal submitted";
+        submissionNotice.style.display = "block";
+      });
+    </script>
+  </body>
+</html>
