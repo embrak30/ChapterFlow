@@ -54,6 +54,9 @@ h2 { font-size: 1.1rem; line-height: 1.25; }
 .table-row { align-items: center; background: #fff; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; display: grid; gap: .8rem; grid-template-columns: 1.45fr .9fr .8fr .85fr .65fr; min-width: 760px; padding: .85rem; text-align: left; width: 100%; }
 .table-head { background: #f2f5f8; color: var(--muted); font-size: .78rem; font-weight: 800; text-transform: uppercase; }
 .table-row.selected, .table-row:hover { background: #f5fbff; }
+.empty-table { background: #fff; color: var(--muted); display: grid; gap: .35rem; padding: 1rem; }
+.empty-table strong { color: var(--ink); }
+.empty-state { align-content: center; background: #f7fafc; border: 1px dashed #aeb9c8; border-radius: 8px; display: grid; min-height: 230px; padding: 1rem; }
 .pill { border-radius: 999px; display: inline-flex; font-size: .78rem; font-weight: 800; justify-content: center; padding: .28rem .55rem; width: fit-content; }
 .pending-review, .submitted { background: #e8f1ff; color: var(--info); }
 .approved, .complete { background: #e7f6ee; color: var(--good); }
