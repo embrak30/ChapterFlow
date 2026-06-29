@@ -13,9 +13,10 @@ export default async function Home() {
     (user?.user_metadata.full_name as string | undefined) ?? (user?.user_metadata.name as string | undefined);
 
   let userRole: BookRole | null = null;
+  let profileName = userName ?? null;
 
   if (user) {
-    const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
+    const { data: profile } = await supabase.from("profiles").select("role, full_name").eq("id", user.id).maybeSingle();
 
     if (profile?.role === "editor" || profile?.role === "admin") {
       userRole = "admin";
@@ -35,7 +36,27 @@ export default async function Home() {
 
       userRole = createdProfile?.role === "facilitator" ? "facilitator" : "author";
     }
+
+    profileName = profile?.full_name ?? userName ?? "New contributor";
   }
 
-  return <ChapterFlowApp userEmail={user?.email} userName={userName} userRole={userRole} />;
+  const { data: books } = await supabase
+    .from("books")
+    .select("*")
+    .order("created_at", { ascending: true });
+
+  const { data: chapters } = await supabase
+    .from("chapters")
+    .select("*, profiles:author_id(full_name, email), submissions(*)")
+    .order("created_at", { ascending: false });
+
+  return (
+    <ChapterFlowApp
+      userEmail={user?.email}
+      userName={profileName}
+      userRole={userRole}
+      books={books ?? []}
+      chapters={chapters ?? []}
+    />
+  );
 }

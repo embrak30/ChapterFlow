@@ -37,14 +37,29 @@ create table if not exists public.profiles (
 create table if not exists public.books (
   id uuid primary key default gen_random_uuid(),
   title text not null,
+  subtitle text default 'Call for chapter proposals',
   description text,
+  call_summary text,
+  author_guidelines text,
+  chapter_spaces text,
+  publication_target text,
+  public_status text not null default 'draft',
   editor_id uuid not null references public.profiles(id),
   proposal_deadline date,
+  decision_date date,
   first_draft_deadline date,
   second_draft_deadline date,
   final_materials_deadline date,
   created_at timestamptz not null default now()
 );
+
+alter table public.books add column if not exists subtitle text default 'Call for chapter proposals';
+alter table public.books add column if not exists call_summary text;
+alter table public.books add column if not exists author_guidelines text;
+alter table public.books add column if not exists chapter_spaces text;
+alter table public.books add column if not exists publication_target text;
+alter table public.books add column if not exists public_status text not null default 'draft';
+alter table public.books add column if not exists decision_date date;
 
 create table if not exists public.chapters (
   id uuid primary key default gen_random_uuid(),
@@ -162,6 +177,15 @@ drop policy if exists "Users can update their own profile" on public.profiles;
 create policy "Users can update their own profile" on public.profiles for update using (id = auth.uid()) with check (id = auth.uid());
 drop policy if exists "Users can create their own profile" on public.profiles;
 create policy "Users can create their own profile" on public.profiles for insert with check (id = auth.uid() and role = 'author');
+drop policy if exists "Facilitators can view assigned author profiles" on public.profiles;
+create policy "Facilitators can view assigned author profiles" on public.profiles for select using (
+  exists (
+    select 1
+    from public.chapters c
+    where c.author_id = profiles.id
+      and public.is_facilitator_for(c.book_id)
+  )
+);
 drop policy if exists "Admins can manage books" on public.books;
 create policy "Admins can manage books" on public.books using (public.is_admin());
 drop policy if exists "Authors can view books" on public.books;
@@ -176,10 +200,44 @@ drop policy if exists "Authors can create chapters" on public.chapters;
 create policy "Authors can create chapters" on public.chapters for insert with check (author_id = auth.uid());
 drop policy if exists "Admins can manage submissions" on public.submissions;
 create policy "Admins can manage submissions" on public.submissions using (public.is_admin());
+drop policy if exists "Facilitators can view assigned submissions" on public.submissions;
+create policy "Facilitators can view assigned submissions" on public.submissions for select using (
+  exists (
+    select 1
+    from public.chapters c
+    where c.id = submissions.chapter_id
+      and public.is_facilitator_for(c.book_id)
+  )
+);
 drop policy if exists "Authors can manage their submissions" on public.submissions;
 create policy "Authors can manage their submissions" on public.submissions using (submitted_by = auth.uid()) with check (submitted_by = auth.uid());
+drop policy if exists "Admins can manage submission files" on public.submission_files;
+create policy "Admins can manage submission files" on public.submission_files using (public.is_admin());
+drop policy if exists "Authors can manage their submission files" on public.submission_files;
+create policy "Authors can manage their submission files" on public.submission_files using (
+  exists (select 1 from public.submissions s where s.id = submission_files.submission_id and s.submitted_by = auth.uid())
+) with check (
+  exists (select 1 from public.submissions s where s.id = submission_files.submission_id and s.submitted_by = auth.uid())
+);
+drop policy if exists "Facilitators can view assigned submission files" on public.submission_files;
+create policy "Facilitators can view assigned submission files" on public.submission_files for select using (
+  exists (
+    select 1
+    from public.submissions s
+    join public.chapters c on c.id = s.chapter_id
+    where s.id = submission_files.submission_id
+      and public.is_facilitator_for(c.book_id)
+  )
+);
 drop policy if exists "Admins can manage reviews" on public.reviews;
 create policy "Admins can manage reviews" on public.reviews using (public.is_admin());
+drop policy if exists "Facilitators can review assigned chapters" on public.reviews;
+create policy "Facilitators can review assigned chapters" on public.reviews using (
+  exists (select 1 from public.chapters c where c.id = reviews.chapter_id and public.is_facilitator_for(c.book_id))
+) with check (
+  reviewer_id = auth.uid()
+  and exists (select 1 from public.chapters c where c.id = reviews.chapter_id and public.is_facilitator_for(c.book_id))
+);
 drop policy if exists "Authors can read reviews for their chapters" on public.reviews;
 create policy "Authors can read reviews for their chapters" on public.reviews for select using (exists (select 1 from public.chapters c where c.id = reviews.chapter_id and c.author_id = auth.uid()));
 drop policy if exists "Admins can manage facilitator assignments" on public.facilitator_books;
