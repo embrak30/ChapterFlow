@@ -146,16 +146,10 @@ function PublicView({ book, isSignedIn }: { book: BookRecord; isSignedIn: boolea
         <h2>{book.title}</h2>
         <p>{book.call_summary || book.description || "Create an account to view the call and submit your chapter proposal."}</p>
       </div>
-      <article className="panel call-card">
-        <div>
-          <span className={book.public_status === "open" ? "pill approved" : "pill pending-review"}>{book.public_status === "open" ? "Open call" : "Call not yet open"}</span>
-          <p className="eyebrow">{book.subtitle || "Call for chapter proposals"}</p>
-          <h2>Author instructions</h2>
-        </div>
-        <div className="call-details">
-          {book.chapter_spaces ? <p><strong>{book.chapter_spaces}</strong></p> : null}
-          {book.publication_target ? <p>{book.publication_target}</p> : null}
-          <p>{book.author_guidelines || "Sign in with Google, create your contributor profile, then submit a proposed chapter title and short proposal summary for editorial review."}</p>
+      <article className="panel deadline-card">
+        <div className="section-heading">
+          <p className="eyebrow">Key dates</p>
+          <h2>Submission timeline</h2>
         </div>
         <DeadlineStrip book={book} />
         <AuthPrompt isSignedIn={isSignedIn} />
@@ -272,8 +266,8 @@ function AuthorView({
         </span>
       </div>
       <div className="author-grid">
-        <section className="panel timeline"><div className="section-heading"><p className="eyebrow">Project dates</p><h2>Deadlines</h2></div><DeadlineList book={book} /></section>
-        <section className="panel">
+        <section className="panel author-deadlines"><div className="section-heading"><p className="eyebrow">Project dates</p><h2>Deadlines</h2></div><DeadlineStrip book={book} /></section>
+        <section className="panel proposal-panel">
           <div className="section-heading">
             <p className="eyebrow">First stage</p>
             <h2>Submit chapter proposal</h2>
@@ -284,15 +278,17 @@ function AuthorView({
             <form action={submitProposal}>
               <input type="hidden" name="book_id" value={book.id} />
               <p className="muted">Submit your proposed chapter title and a short summary. Draft manuscript upload will unlock after approval.</p>
-              <label>Proposed chapter title<input name="title" required placeholder="Enter your proposed chapter title" defaultValue={chapter?.title ?? ""} /></label>
-              <label>Short chapter abstract<textarea name="abstract" placeholder="A short public abstract or outline of the chapter." defaultValue={chapter?.abstract ?? ""} /></label>
-              <label>Proposal summary<textarea name="proposal_outline" required placeholder="Describe what the chapter will cover and how it fits the call." defaultValue={chapter?.proposal_outline ?? ""} /></label>
-              <label>Author biography<textarea name="biography" placeholder="Add the biography you want the editor to hold with your chapter." defaultValue={chapter?.submissions?.[0]?.author_biography ?? ""} /></label>
+              <div className="proposal-form-grid">
+                <label>Proposed chapter title<input name="title" required placeholder="Enter your proposed chapter title" defaultValue={chapter?.title ?? ""} /></label>
+                <label>Short chapter abstract<textarea name="abstract" placeholder="A short public abstract or outline of the chapter." defaultValue={chapter?.abstract ?? ""} /></label>
+                <label>Proposal summary<textarea name="proposal_outline" required placeholder="Describe what the chapter will cover and how it fits the call." defaultValue={chapter?.proposal_outline ?? ""} /></label>
+                <label>Author biography<textarea name="biography" placeholder="Add the biography you want the editor to hold with your chapter." defaultValue={chapter?.submissions?.[0]?.author_biography ?? ""} /></label>
+              </div>
               <button className="primary" type="submit">{hasProposal ? "Update proposal" : "Submit proposal"}</button>
             </form>
           )}
         </section>
-        <section className="panel">
+        <section className="panel draft-panel">
           <div className="section-heading"><p className="eyebrow">Next stage</p><h2>First draft manuscript</h2></div>
           <div className="empty-state">
             <h2>{proposalApproved ? "Ready for draft upload" : "Locked until proposal approval"}</h2>
@@ -338,9 +334,7 @@ function CallSettingsForm({ book, hasBooks }: { book?: BookRecord; hasBooks: boo
       <h3>{hasBooks ? "Public call settings" : "Create your first call"}</h3>
       <input type="hidden" name="book_id" value={book?.id ?? ""} />
       <label>Book / project title<input name="title" required defaultValue={book?.title ?? ""} placeholder="Example: Leadership With Mission Integrity" /></label>
-      <label>Subtitle<input name="subtitle" defaultValue={book?.subtitle ?? "Call for chapter proposals"} /></label>
       <label>Short public welcome<textarea name="call_summary" defaultValue={book?.call_summary ?? ""} placeholder="Welcome authors and explain what they are being invited to submit." /></label>
-      <label>Author instructions<textarea name="author_guidelines" defaultValue={book?.author_guidelines ?? ""} placeholder="Explain who can submit, what the proposal should include, and what happens after review." /></label>
       <label>Chapter spaces<input name="chapter_spaces" defaultValue={book?.chapter_spaces ?? ""} placeholder="Example: 12 chapters + 2 reserve spaces" /></label>
       <label>Publication target<input name="publication_target" defaultValue={book?.publication_target ?? ""} placeholder="Example: Planned publication February 2027" /></label>
       <label>Public status<select name="public_status" defaultValue={book?.public_status ?? "draft"}><option value="draft">Draft</option><option value="open">Open</option><option value="closed">Closed</option></select></label>
