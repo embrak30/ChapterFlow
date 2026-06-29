@@ -77,6 +77,12 @@ textarea { min-height: 110px; resize: vertical; }
 .intro-band h2 { font-size: clamp(1.6rem, 3vw, 2.7rem); max-width: 900px; }
 .call-grid, .author-grid, .form-grid { display: grid; gap: 1rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .call-card { display: grid; gap: 1rem; }
+.guidance-panel { display: grid; gap: 1rem; }
+.guidance-grid { display: grid; gap: 1rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.guidance-block { border: 1px solid var(--line); border-radius: 8px; display: grid; gap: .65rem; padding: 1rem; }
+.guidance-block h3 { font-size: 1rem; }
+.guidance-block p, .guidance-block li { color: var(--muted); font-size: .92rem; line-height: 1.5; }
+.guidance-block ul { margin: 0; padding-left: 1.15rem; }
 .date-strip { display: grid; gap: .6rem; grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .date-strip span { background: #f7fafc; border: 1px solid var(--line); border-radius: 7px; color: var(--muted); display: grid; gap: .25rem; padding: .7rem; }
 .date-strip strong { color: var(--ink); }
@@ -84,4 +90,4 @@ textarea { min-height: 110px; resize: vertical; }
 .notice { background: #e7f6ee; border: 1px solid #b7dfc7; border-radius: 7px; color: var(--good); font-size: .9rem; font-weight: 700; margin-top: .85rem; padding: .75rem; }
 .timeline ol { color: var(--muted); margin: 0; padding-left: 1.25rem; }
 @media (max-width: 1180px) { .workspace { grid-template-columns: 1fr; } .sidebar { display: grid; gap: 1rem; grid-template-columns: 1fr 1fr; } }
-@media (max-width: 760px) { main { padding: .75rem; } .topbar, .author-summary, .top-actions, .auth-box { align-items: stretch; flex-direction: column; } .role-switch { width: 100%; } .role-switch button { flex: 1; } .sidebar, .author-grid, .call-grid, .form-grid, .date-strip { grid-template-columns: 1fr; } }
+@media (max-width: 760px) { main { padding: .75rem; } .topbar, .author-summary, .top-actions, .auth-box { align-items: stretch; flex-direction: column; } .role-switch { width: 100%; } .role-switch button { flex: 1; } .sidebar, .author-grid, .call-grid, .form-grid, .guidance-grid, .date-strip { grid-template-columns: 1fr; } }

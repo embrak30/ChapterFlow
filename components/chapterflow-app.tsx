@@ -160,7 +160,84 @@ function PublicView({ book, isSignedIn }: { book: BookRecord; isSignedIn: boolea
         <DeadlineStrip book={book} />
         <AuthPrompt isSignedIn={isSignedIn} />
       </article>
+      <AuthorGuidance />
     </section>
+  );
+}
+
+function AuthorGuidance() {
+  return (
+    <section className="panel guidance-panel">
+      <div className="section-heading">
+        <p className="eyebrow">Author guidance</p>
+        <h2>Chapter submission expectations</h2>
+        <p className="muted">We welcome contributions from experienced practitioners, researchers, and educational leaders from across the international school sector.</p>
+      </div>
+      <div className="guidance-grid">
+        <GuidanceBlock title="Chapter Expectations">
+          <p>Authors should submit a chapter that:</p>
+          <ul>
+            <li>Aligns clearly with the central theme of Mission Integrity.</li>
+            <li>Combines scholarly evidence with practical application.</li>
+            <li>Offers original insights, case studies, frameworks, or examples that can support leaders in international schools.</li>
+            <li>Is written in an accessible style for both aspiring and experienced school leaders.</li>
+          </ul>
+        </GuidanceBlock>
+        <GuidanceBlock title="Chapter Length">
+          <p>5,000 to 7,000 words, excluding references.</p>
+        </GuidanceBlock>
+        <GuidanceBlock title="Suggested Structure">
+          <ul>
+            <li>Introduction</li>
+            <li>Context and rationale</li>
+            <li>Key concepts and discussion</li>
+            <li>Practical implications for school leaders</li>
+            <li>Case study or examples, where appropriate</li>
+            <li>Reflection and concluding recommendations</li>
+          </ul>
+        </GuidanceBlock>
+        <GuidanceBlock title="Referencing">
+          <ul>
+            <li>Use APA 7th Edition throughout.</li>
+            <li>Ensure all references are complete and accurate.</li>
+            <li>Where possible, include recent research alongside seminal literature.</li>
+          </ul>
+        </GuidanceBlock>
+        <GuidanceBlock title="Style Guidelines">
+          <ul>
+            <li>Write in clear, professional English.</li>
+            <li>Avoid excessive jargon.</li>
+            <li>Use headings and subheadings to improve readability.</li>
+            <li>Clearly label tables and figures, with permissions where required.</li>
+            <li>Define specialist terminology when first introduced.</li>
+          </ul>
+        </GuidanceBlock>
+        <GuidanceBlock title="Originality">
+          <p>By submitting a chapter, authors confirm that the work is original, has not been previously published, is not under consideration elsewhere, and has appropriate permissions for any copyrighted material.</p>
+          <p>All submissions may be screened for originality.</p>
+        </GuidanceBlock>
+        <GuidanceBlock title="Review Process">
+          <p>Each chapter will undergo editorial review. Authors may be asked to revise their work based on feedback to ensure consistency, quality, and alignment with the overall vision of the book.</p>
+        </GuidanceBlock>
+        <GuidanceBlock title="Submission Requirements">
+          <ul>
+            <li>Chapter manuscript in Microsoft Word (.docx)</li>
+            <li>Author biography of 100 to 150 words</li>
+            <li>Professional photograph, optional</li>
+            <li>Institutional affiliation and contact details</li>
+          </ul>
+        </GuidanceBlock>
+      </div>
+    </section>
+  );
+}
+
+function GuidanceBlock({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <article className="guidance-block">
+      <h3>{title}</h3>
+      {children}
+    </article>
   );
 }
 
