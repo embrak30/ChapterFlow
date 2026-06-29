@@ -84,6 +84,11 @@ textarea { min-height: 110px; resize: vertical; }
 .guidance-block h3 { font-size: 1rem; }
 .guidance-block p, .guidance-block li { color: var(--muted); font-size: .92rem; line-height: 1.5; }
 .guidance-block ul { margin: 0; padding-left: 1.15rem; }
+.sample-proposal { background: #f7fafc; border: 1px solid var(--line); border-radius: 8px; display: grid; gap: 1rem; padding: 1rem; }
+.sample-fields { display: grid; gap: .75rem; }
+.sample-fields div { background: #fff; border: 1px solid var(--line); border-radius: 7px; display: grid; gap: .4rem; padding: .85rem; }
+.sample-fields strong { color: var(--ink); }
+.sample-fields p { color: var(--muted); font-size: .92rem; line-height: 1.5; }
 .date-strip { display: grid; gap: .6rem; grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .date-strip span { background: #f7fafc; border: 1px solid var(--line); border-radius: 7px; color: var(--muted); display: grid; gap: .25rem; padding: .7rem; }
 .date-strip strong { color: var(--ink); }

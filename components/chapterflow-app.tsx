@@ -222,6 +222,7 @@ function AuthorGuidance() {
           </ul>
         </GuidanceBlock>
       </div>
+      <SampleProposal />
     </section>
   );
 }
@@ -231,6 +232,37 @@ function GuidanceBlock({ title, children }: { title: string; children: React.Rea
     <article className="guidance-block">
       <h3>{title}</h3>
       {children}
+    </article>
+  );
+}
+
+function SampleProposal() {
+  return (
+    <article className="sample-proposal">
+      <div className="section-heading">
+        <p className="eyebrow">Example proposal</p>
+        <h2>What a completed chapter proposal could look like</h2>
+      </div>
+      <div className="sample-fields">
+        <div>
+          <strong>Proposed chapter title</strong>
+          <p>Leading With Mission Integrity During Strategic Change in International Schools</p>
+        </div>
+        <div>
+          <strong>Short chapter abstract</strong>
+          <p>This chapter explores how school leaders can protect mission integrity while navigating strategic change, growth, and competing stakeholder expectations. Drawing on research into values-led leadership and practical experience in international school settings, it offers a framework for aligning decisions, communication, and accountability with the stated mission of the school.</p>
+        </div>
+        <div>
+          <strong>Proposal summary</strong>
+          <p>The chapter will examine the tension between aspirational mission statements and the daily decisions that shape school culture. It will begin by defining mission integrity and explaining why it matters in international schools, particularly during periods of expansion, curriculum change, accreditation, or leadership transition.</p>
+          <p>The chapter will then present a practical framework that leaders can use to test whether strategic decisions remain aligned with mission, values, and community commitments. A short case example will illustrate how leaders can use reflective questions, stakeholder dialogue, and evidence-informed decision-making to maintain trust and coherence.</p>
+          <p>The chapter will conclude with recommendations for aspiring and experienced school leaders, including how to communicate mission-aligned decisions, avoid performative values language, and build review processes that keep mission integrity visible over time.</p>
+        </div>
+        <div>
+          <strong>Author biography</strong>
+          <p>Dr Alex Morgan is an international school leader and researcher with experience in strategic planning, leadership development, and school improvement. Their work focuses on values-led leadership, organisational culture, and the practical application of research in international education.</p>
+        </div>
+      </div>
     </article>
   );
 }
