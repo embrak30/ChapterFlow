@@ -31,11 +31,11 @@ export type Chapter = {
 };
 
 export const workflowStages: Array<{ name: Stage; description: string; owner: "Author" | "Editor" }> = [
-  { name: "Proposal", description: "Authors submit chapter title, outline, and fit with the book theme.", owner: "Author" },
-  { name: "Proposal revision", description: "Editors request refinement before accepting a chapter.", owner: "Editor" },
-  { name: "First draft", description: "Approved contributors upload the first full chapter draft.", owner: "Author" },
-  { name: "Second draft", description: "Authors respond to editorial feedback and upload a revised document.", owner: "Author" },
-  { name: "Final materials", description: "Final chapter, abstract, biography, and permissions are confirmed.", owner: "Author" },
+  { name: "Proposal", description: "Authors submit a title and story-led chapter idea rooted in practice.", owner: "Author" },
+  { name: "Proposal revision", description: "Editors ask authors to clarify the story, focus, or learning value.", owner: "Editor" },
+  { name: "First draft", description: "Approved contributors upload the first full story-led chapter draft.", owner: "Author" },
+  { name: "Second draft", description: "Authors respond to editorial feedback and strengthen the chapter.", owner: "Author" },
+  { name: "Final materials", description: "Final chapter, overview, biography, and permissions are confirmed.", owner: "Author" },
   { name: "Complete", description: "Chapter is accepted into the manuscript package.", owner: "Editor" }
 ];
 
@@ -61,9 +61,9 @@ export const callsForChapters = [
     title: "Leadership With Mission Integrity",
     subtitle: "Call for chapter proposals",
     summary:
-      "ChapterFlow helps editorial teams collect proposals, manage draft deadlines, review submissions, and keep every contributor informed from first idea to final manuscript.",
+      "ChapterFlow helps editorial teams collect story-led proposals, manage draft deadlines, review submissions, and keep every contributor informed from first idea to final manuscript.",
     details: [
-      "Collect chapter titles, abstracts, biographies, and proposal summaries in one place.",
+      "Collect chapter titles, story overviews, biographies, and proposal summaries in one place.",
       "Move accepted contributors through first draft, revision, and final material stages.",
       "Give editors and facilitators a clear review board for decisions, notes, and follow-up messages.",
       "Keep authors focused with visible deadlines, submission history, and next actions."

@@ -79,7 +79,7 @@ export async function submitProposal(formData: FormData) {
   const biography = textValue(formData, "biography");
 
   if (!bookId || !title || !proposalOutline) {
-    throw new Error("Please add a chapter title and proposal summary before submitting.");
+    throw new Error("Please add a chapter title and story proposal before submitting.");
   }
 
   if (biography) {

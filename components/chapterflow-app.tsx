@@ -58,8 +58,8 @@ const fallbackBook: BookRecord = {
   title: "ChapterFlow",
   subtitle: "Call for chapter proposals",
   description: "Welcome to ChapterFlow. Sign in to create your author profile and submit your chapter proposal.",
-  call_summary: "The editor has not published a call yet. Once the call is open, the proposal form and deadlines will appear here.",
-  author_guidelines: "Create an account, read the call carefully, then submit your proposed chapter title and summary for review.",
+  call_summary: "The editor has not published a call yet. Once the call is open, the story proposal form and deadlines will appear here.",
+  author_guidelines: "Create an account, read the call carefully, then submit your proposed chapter title and story summary for review.",
   chapter_spaces: "",
   publication_target: "",
   public_status: "draft",
@@ -164,46 +164,47 @@ function AuthorGuidance() {
     <section className="panel guidance-panel">
       <div className="section-heading">
         <p className="eyebrow">Author guidance</p>
-        <h2>Chapter submission expectations</h2>
-        <p className="muted">We welcome contributions from experienced practitioners, researchers, and educational leaders from across the international school sector.</p>
+        <h2>Story-led chapters from the field</h2>
+        <p className="muted">We welcome contributions from experienced practitioners, researchers, and educational leaders across the international school sector. Chapters should be rooted in real experience and written for leaders who want to learn from honest, thoughtful stories of practice.</p>
       </div>
       <div className="guidance-grid">
-        <GuidanceBlock title="Chapter Expectations">
-          <p>Authors should submit a chapter that:</p>
+        <GuidanceBlock title="What We Are Looking For">
+          <p>Authors should propose a chapter that:</p>
           <ul>
-            <li>Aligns clearly with the central theme of Mission Integrity.</li>
-            <li>Combines scholarly evidence with practical application.</li>
-            <li>Offers original insights, case studies, frameworks, or examples that can support leaders in international schools.</li>
-            <li>Is written in an accessible style for both aspiring and experienced school leaders.</li>
+            <li>Tells a real story or describes a lived leadership experience connected to Mission Integrity.</li>
+            <li>Shows what happened, why it mattered, and what others can learn from it.</li>
+            <li>Connects the experience lightly to relevant leadership ideas, research, or professional reading.</li>
+            <li>Offers practical insight for aspiring and experienced international school leaders.</li>
           </ul>
         </GuidanceBlock>
         <GuidanceBlock title="Chapter Length">
           <p>5,000 to 7,000 words, excluding references.</p>
         </GuidanceBlock>
-        <GuidanceBlock title="Suggested Structure">
+        <GuidanceBlock title="Possible Structure">
           <ul>
-            <li>Introduction</li>
-            <li>Context and rationale</li>
-            <li>Key concepts and discussion</li>
-            <li>Practical implications for school leaders</li>
-            <li>Case study or examples, where appropriate</li>
-            <li>Reflection and concluding recommendations</li>
+            <li>Introduce the leadership story, question, or moment of practice.</li>
+            <li>Describe the school context and why mission or vision mattered.</li>
+            <li>Explain what happened and the decisions, tensions, or learning involved.</li>
+            <li>Draw out practical implications for other school leaders.</li>
+            <li>Connect briefly to relevant ideas, frameworks, or research where helpful.</li>
+            <li>Close with reflections, lessons learned, or recommendations.</li>
           </ul>
         </GuidanceBlock>
-        <GuidanceBlock title="Referencing">
+        <GuidanceBlock title="Use of Evidence">
           <ul>
-            <li>Use APA 7th Edition throughout.</li>
+            <li>Use research, frameworks, or professional literature to support the story, not overwhelm it.</li>
+            <li>Keep the writing accessible to busy school leaders.</li>
+            <li>Use APA 7th Edition for any sources you cite.</li>
             <li>Ensure all references are complete and accurate.</li>
-            <li>Where possible, include recent research alongside seminal literature.</li>
           </ul>
         </GuidanceBlock>
         <GuidanceBlock title="Style Guidelines">
           <ul>
-            <li>Write in clear, professional English.</li>
-            <li>Avoid excessive jargon.</li>
+            <li>Write in clear, professional, human language.</li>
+            <li>Use your own voice and avoid excessive jargon.</li>
             <li>Use headings and subheadings to improve readability.</li>
             <li>Clearly label tables and figures, with permissions where required.</li>
-            <li>Define specialist terminology when first introduced.</li>
+            <li>Define specialist terminology when first introduced, or choose simpler wording where possible.</li>
           </ul>
         </GuidanceBlock>
         <GuidanceBlock title="Originality">
@@ -211,7 +212,7 @@ function AuthorGuidance() {
           <p>All submissions may be screened for originality.</p>
         </GuidanceBlock>
         <GuidanceBlock title="Review Process">
-          <p>Each chapter will undergo editorial review. Authors may be asked to revise their work based on feedback to ensure consistency, quality, and alignment with the overall vision of the book.</p>
+          <p>Each chapter will undergo editorial review. Authors may be asked to revise their work so that the chapter remains clear, useful, authentic, and aligned with the overall vision of the book.</p>
         </GuidanceBlock>
         <GuidanceBlock title="Submission Requirements">
           <ul>
@@ -246,21 +247,21 @@ function SampleProposal() {
       <div className="sample-fields">
         <div>
           <strong>Proposed chapter title</strong>
-          <p>Leading With Mission Integrity During Strategic Change in International Schools</p>
+          <p>When the Mission Was Tested: Leading a School Community Through a Difficult Decision</p>
         </div>
         <div>
-          <strong>Short chapter abstract</strong>
-          <p>This chapter explores how school leaders can protect mission integrity while navigating strategic change, growth, and competing stakeholder expectations. Drawing on research into values-led leadership and practical experience in international school settings, it offers a framework for aligning decisions, communication, and accountability with the stated mission of the school.</p>
+          <strong>Short chapter overview</strong>
+          <p>This chapter will tell the story of a moment when our school had to make a difficult decision that tested the meaning of its mission. It will describe the context, the competing pressures, the leadership choices involved, and the lessons learned about keeping mission and values alive when decisions are complex.</p>
         </div>
         <div>
-          <strong>Proposal summary</strong>
-          <p>The chapter will examine the tension between aspirational mission statements and the daily decisions that shape school culture. It will begin by defining mission integrity and explaining why it matters in international schools, particularly during periods of expansion, curriculum change, accreditation, or leadership transition.</p>
-          <p>The chapter will then present a practical framework that leaders can use to test whether strategic decisions remain aligned with mission, values, and community commitments. A short case example will illustrate how leaders can use reflective questions, stakeholder dialogue, and evidence-informed decision-making to maintain trust and coherence.</p>
-          <p>The chapter will conclude with recommendations for aspiring and experienced school leaders, including how to communicate mission-aligned decisions, avoid performative values language, and build review processes that keep mission integrity visible over time.</p>
+          <strong>Story proposal</strong>
+          <p>The chapter will begin with a real leadership situation from an international school context. The school had a clear mission statement, but a particular decision created tension between what the school said it valued and what different stakeholders expected it to do. The chapter will describe the situation honestly, including the uncertainty, conversations, and trade-offs involved.</p>
+          <p>Rather than presenting a simple success story, the chapter will explore what it felt like to lead through the process, what helped the team stay connected to the mission, and where the experience revealed gaps between language and practice. It will include practical examples of how leaders used dialogue, reflection, and evidence to make decisions that were more closely aligned with the school’s stated values.</p>
+          <p>The chapter will draw lightly on leadership thinking about values-led decision-making and organisational culture, but the main focus will remain on the lived experience. It will close with lessons that other international school leaders could use when mission, vision, and real-world pressures come into conflict.</p>
         </div>
         <div>
           <strong>Author biography</strong>
-          <p>Dr Alex Morgan is an international school leader and researcher with experience in strategic planning, leadership development, and school improvement. Their work focuses on values-led leadership, organisational culture, and the practical application of research in international education.</p>
+          <p>Alex Morgan is an international school leader with experience in school improvement, strategic planning, and staff development. Their professional interests include values-led leadership, school culture, and helping leadership teams turn mission statements into meaningful everyday practice.</p>
         </div>
       </div>
     </article>
@@ -309,11 +310,11 @@ function AuthorView({
           ) : (
             <form action={submitProposal}>
               <input type="hidden" name="book_id" value={book.id} />
-              <p className="muted">Submit your proposed chapter title and a short summary. Draft manuscript upload will unlock after approval.</p>
+              <p className="muted">Submit your proposed chapter title and a short story-led summary. Draft manuscript upload will unlock after approval.</p>
               <div className="proposal-form-grid">
                 <label>Proposed chapter title<input name="title" required placeholder="Enter your proposed chapter title" defaultValue={chapter?.title ?? ""} /></label>
-                <label>Short chapter abstract<textarea name="abstract" placeholder="A short public abstract or outline of the chapter." defaultValue={chapter?.abstract ?? ""} /></label>
-                <label>Proposal summary<textarea name="proposal_outline" required placeholder="Describe what the chapter will cover and how it fits the call." defaultValue={chapter?.proposal_outline ?? ""} /></label>
+                <label>Short chapter overview<textarea name="abstract" placeholder="Briefly introduce the leadership story or experience you want to write about." defaultValue={chapter?.abstract ?? ""} /></label>
+                <label>Story proposal<textarea name="proposal_outline" required placeholder="Describe the real experience, why it matters, what others could learn from it, and any light research or leadership ideas you may connect to it." defaultValue={chapter?.proposal_outline ?? ""} /></label>
                 <label>Author biography<textarea name="biography" placeholder="Add the biography you want the editor to hold with your chapter." defaultValue={chapter?.submissions?.[0]?.author_biography ?? ""} /></label>
               </div>
               <button className="primary" type="submit">{hasProposal ? "Update proposal" : "Submit proposal"}</button>
@@ -366,7 +367,7 @@ function CallSettingsForm({ book, hasBooks }: { book?: BookRecord; hasBooks: boo
       <h3>{hasBooks ? "Public call settings" : "Create your first call"}</h3>
       <input type="hidden" name="book_id" value={book?.id ?? ""} />
       <label>Book / project title<input name="title" required defaultValue={book?.title ?? ""} placeholder="Example: Leadership With Mission Integrity" /></label>
-      <label>Short public welcome<textarea name="call_summary" defaultValue={book?.call_summary ?? ""} placeholder="Welcome authors and explain what they are being invited to submit." /></label>
+      <label>Short public welcome<textarea name="call_summary" defaultValue={book?.call_summary ?? ""} placeholder="Welcome authors and explain the kind of story-led chapter you are inviting them to propose." /></label>
       <label>Chapter spaces<input name="chapter_spaces" defaultValue={book?.chapter_spaces ?? ""} placeholder="Example: 12 chapters + 2 reserve spaces" /></label>
       <label>Publication target<input name="publication_target" defaultValue={book?.publication_target ?? ""} placeholder="Example: Planned publication February 2027" /></label>
       <label>Public status<select name="public_status" defaultValue={book?.public_status ?? "draft"}><option value="draft">Draft</option><option value="open">Open</option><option value="closed">Closed</option></select></label>
@@ -418,7 +419,7 @@ function ReviewWorkspace({
           <>
             <div className="section-heading"><p className="eyebrow">Proposal review</p><h2>{selected.title}</h2></div>
             <div className="meta-list"><p><strong>Author</strong>{selected.profiles?.full_name || selected.profiles?.email || "Author"}</p><p><strong>Current stage</strong>{displayStatus(selected.stage)}</p><p><strong>Deadline</strong>{formatDate(selected.current_deadline)}</p></div>
-            <div className="document-preview"><span>Proposal summary</span><p>{selected.proposal_outline || selected.abstract || "No proposal text supplied."}</p></div>
+            <div className="document-preview"><span>Story proposal</span><p>{selected.proposal_outline || selected.abstract || "No proposal text supplied."}</p></div>
             {canDecide ? <ReviewForm book={book} chapter={selected} /> : null}
           </>
         ) : (
