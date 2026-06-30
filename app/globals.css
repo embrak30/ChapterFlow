@@ -72,6 +72,7 @@ input, select, textarea { border: 1px solid var(--line); border-radius: 7px; col
 textarea { min-height: 110px; resize: vertical; }
 .email-draft { background: #f7fafc; border: 1px solid var(--line); border-radius: 8px; display: grid; gap: .55rem; margin-bottom: 1rem; padding: .85rem; }
 .email-draft p { color: var(--muted); font-size: .9rem; }
+.button-row { display: flex; flex-wrap: wrap; gap: .65rem; }
 .public-view, .author-view { display: grid; gap: 1rem; margin: 0 auto; max-width: 1180px; }
 .intro-band { background: #dfeaf3; border: 1px solid #c5d7e6; border-radius: 8px; display: grid; gap: .8rem; padding: clamp(1rem, 3vw, 2rem); }
 .intro-band h2 { font-size: clamp(1.6rem, 3vw, 2.7rem); max-width: 900px; }

@@ -240,6 +240,21 @@ create policy "Facilitators can review assigned chapters" on public.reviews usin
 );
 drop policy if exists "Authors can read reviews for their chapters" on public.reviews;
 create policy "Authors can read reviews for their chapters" on public.reviews for select using (exists (select 1 from public.chapters c where c.id = reviews.chapter_id and c.author_id = auth.uid()));
+drop policy if exists "Admins can manage email logs" on public.email_logs;
+create policy "Admins can manage email logs" on public.email_logs using (public.is_admin()) with check (public.is_admin());
+drop policy if exists "Facilitators can create assigned email logs" on public.email_logs;
+create policy "Facilitators can create assigned email logs" on public.email_logs for insert with check (
+  sent_by = auth.uid()
+  and exists (select 1 from public.chapters c where c.id = email_logs.chapter_id and public.is_facilitator_for(c.book_id))
+);
+drop policy if exists "Facilitators can read assigned email logs" on public.email_logs;
+create policy "Facilitators can read assigned email logs" on public.email_logs for select using (
+  exists (select 1 from public.chapters c where c.id = email_logs.chapter_id and public.is_facilitator_for(c.book_id))
+);
+drop policy if exists "Authors can read email logs for their chapters" on public.email_logs;
+create policy "Authors can read email logs for their chapters" on public.email_logs for select using (
+  exists (select 1 from public.chapters c where c.id = email_logs.chapter_id and c.author_id = auth.uid())
+);
 drop policy if exists "Admins can manage facilitator assignments" on public.facilitator_books;
 create policy "Admins can manage facilitator assignments" on public.facilitator_books using (public.is_admin());
 drop policy if exists "Facilitators can read their assignments" on public.facilitator_books;

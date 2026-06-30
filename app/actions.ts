@@ -5,6 +5,74 @@ import { createClient } from "@/lib/supabase/server";
 
 type ReviewDecision = "approved" | "revision_requested" | "rejected";
 
+function formatDate(date?: string | null) {
+  if (!date) return "to be confirmed";
+  return new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(date));
+}
+
+function displayDecision(decision: ReviewDecision) {
+  if (decision === "approved") return "Approved";
+  if (decision === "revision_requested") return "Improvements requested";
+  return "Not accepted";
+}
+
+function getSiteUrl() {
+  if (process.env.NEXT_PUBLIC_SITE_URL) return process.env.NEXT_PUBLIC_SITE_URL;
+  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
+  return "https://chapterflow.xyz";
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;")
+    .replaceAll("\n", "<br />");
+}
+
+async function sendResendEmail({
+  to,
+  subject,
+  text,
+  html
+}: {
+  to: string;
+  subject: string;
+  text: string;
+  html: string;
+}) {
+  const apiKey = process.env.RESEND_API_KEY;
+  const from = process.env.EMAIL_FROM || "ChapterFlow <onboarding@resend.dev>";
+  const replyTo = process.env.EMAIL_REPLY_TO || "editor@chapterflow.xyz";
+
+  if (!apiKey) {
+    throw new Error("RESEND_API_KEY is not set. Add it in Vercel Environment Variables before sending notifications.");
+  }
+
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      from,
+      to,
+      reply_to: replyTo,
+      subject,
+      text,
+      html
+    })
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Resend could not send the email: ${body}`);
+  }
+}
+
 async function getSignedInProfile() {
   const supabase = await createClient();
   const {
@@ -142,12 +210,17 @@ export async function reviewProposal(formData: FormData) {
   const bookId = textValue(formData, "book_id");
   const decision = textValue(formData, "decision") as ReviewDecision;
   const feedback = textValue(formData, "feedback");
+  const shouldNotify = textValue(formData, "_action") === "notify";
 
   if (!chapterId || !bookId || !["approved", "revision_requested", "rejected"].includes(decision)) {
     throw new Error("Choose a valid review decision.");
   }
 
-  const { data: book } = await supabase.from("books").select("first_draft_deadline, proposal_deadline").eq("id", bookId).single();
+  const { data: book } = await supabase
+    .from("books")
+    .select("title, first_draft_deadline, proposal_deadline")
+    .eq("id", bookId)
+    .single();
   const nextStage = decision === "approved" ? "first_draft" : decision === "revision_requested" ? "proposal_revision" : "proposal";
   const nextDeadline = decision === "approved" ? book?.first_draft_deadline ?? null : book?.proposal_deadline ?? null;
 
@@ -173,6 +246,89 @@ export async function reviewProposal(formData: FormData) {
 
   if (reviewError) {
     throw new Error(reviewError.message);
+  }
+
+  if (shouldNotify) {
+    const { data: chapter, error: chapterError } = await supabase
+      .from("chapters")
+      .select("title, profiles:author_id(full_name, email)")
+      .eq("id", chapterId)
+      .single();
+
+    if (chapterError || !chapter) {
+      throw new Error(chapterError?.message ?? "Could not find the author email for this proposal.");
+    }
+
+    const author = Array.isArray(chapter.profiles) ? chapter.profiles[0] : chapter.profiles;
+    const recipientEmail = author?.email;
+
+    if (!recipientEmail) {
+      throw new Error("This author does not have an email address on their profile.");
+    }
+
+    const authorName = author?.full_name || "there";
+    const decisionLabel = displayDecision(decision);
+    const subject = `Update on your ChapterFlow proposal: ${chapter.title}`;
+    const chapterFlowUrl = getSiteUrl();
+    const body = [
+      `Hello ${authorName},`,
+      "",
+      `There is an update on your chapter proposal for ${book?.title ?? "the edited book project"}.`,
+      "",
+      `Chapter proposal: ${chapter.title}`,
+      `Decision: ${decisionLabel}`,
+      `Next deadline: ${formatDate(nextDeadline)}`,
+      "",
+      "Feedback:",
+      feedback || "No additional feedback was added.",
+      "",
+      `You can sign in to ChapterFlow here: ${chapterFlowUrl}`,
+      "",
+      "Best wishes,",
+      "The ChapterFlow editorial team"
+    ].join("\n");
+
+    const html = `
+      <p>Hello ${escapeHtml(authorName)},</p>
+      <p>There is an update on your chapter proposal for <strong>${escapeHtml(book?.title ?? "the edited book project")}</strong>.</p>
+      <p><strong>Chapter proposal:</strong> ${escapeHtml(chapter.title)}<br />
+      <strong>Decision:</strong> ${escapeHtml(decisionLabel)}<br />
+      <strong>Next deadline:</strong> ${formatDate(nextDeadline)}</p>
+      <p><strong>Feedback:</strong></p>
+      <p>${escapeHtml(feedback || "No additional feedback was added.")}</p>
+      <p><a href="${chapterFlowUrl}">Sign in to ChapterFlow</a></p>
+      <p>Best wishes,<br />The ChapterFlow editorial team</p>
+    `;
+
+    try {
+      await sendResendEmail({
+        to: recipientEmail,
+        subject,
+        text: body,
+        html
+      });
+
+      await supabase.from("email_logs").insert({
+        chapter_id: chapterId,
+        recipient_email: recipientEmail,
+        subject,
+        body,
+        status: "sent",
+        sent_by: user.id,
+        sent_at: new Date().toISOString()
+      });
+    } catch (error) {
+      await supabase.from("email_logs").insert({
+        chapter_id: chapterId,
+        recipient_email: recipientEmail,
+        subject,
+        body,
+        status: "failed",
+        sent_by: user.id
+      });
+
+      throw error;
+    }
   }
 
   revalidatePath("/");
