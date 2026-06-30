@@ -210,6 +210,9 @@ export async function reviewProposal(formData: FormData) {
   const bookId = textValue(formData, "book_id");
   const decision = textValue(formData, "decision") as ReviewDecision;
   const feedback = textValue(formData, "feedback");
+  const emailTemplateName = textValue(formData, "email_template_name");
+  const emailSubject = textValue(formData, "email_subject");
+  const emailTemplateBody = textValue(formData, "email_template_body");
   const shouldNotify = textValue(formData, "_action") === "notify";
 
   if (!chapterId || !bookId || !["approved", "revision_requested", "rejected"].includes(decision)) {
@@ -223,6 +226,12 @@ export async function reviewProposal(formData: FormData) {
     .single();
   const nextStage = decision === "approved" ? "first_draft" : decision === "revision_requested" ? "proposal_revision" : "proposal";
   const nextDeadline = decision === "approved" ? book?.first_draft_deadline ?? null : book?.proposal_deadline ?? null;
+  const combinedFeedback = [
+    emailTemplateBody || "",
+    feedback ? `Additional feedback:\n${feedback}` : ""
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 
   const { error: updateError } = await supabase
     .from("chapters")
@@ -241,7 +250,7 @@ export async function reviewProposal(formData: FormData) {
     chapter_id: chapterId,
     reviewer_id: user.id,
     decision,
-    feedback
+    feedback: combinedFeedback || feedback
   });
 
   if (reviewError) {
@@ -268,7 +277,7 @@ export async function reviewProposal(formData: FormData) {
 
     const authorName = author?.full_name || "there";
     const decisionLabel = displayDecision(decision);
-    const subject = `Update on your ChapterFlow proposal: ${chapter.title}`;
+    const subject = emailSubject || `Update on your ChapterFlow proposal: ${chapter.title}`;
     const chapterFlowUrl = getSiteUrl();
     const body = [
       `Hello ${authorName},`,
@@ -279,8 +288,9 @@ export async function reviewProposal(formData: FormData) {
       `Decision: ${decisionLabel}`,
       `Next deadline: ${formatDate(nextDeadline)}`,
       "",
-      "Feedback:",
-      feedback || "No additional feedback was added.",
+      emailTemplateName ? `Email template: ${emailTemplateName}` : "",
+      "Message:",
+      combinedFeedback || feedback || "No additional feedback was added.",
       "",
       `You can sign in to ChapterFlow here: ${chapterFlowUrl}`,
       "",
@@ -294,8 +304,9 @@ export async function reviewProposal(formData: FormData) {
       <p><strong>Chapter proposal:</strong> ${escapeHtml(chapter.title)}<br />
       <strong>Decision:</strong> ${escapeHtml(decisionLabel)}<br />
       <strong>Next deadline:</strong> ${formatDate(nextDeadline)}</p>
-      <p><strong>Feedback:</strong></p>
-      <p>${escapeHtml(feedback || "No additional feedback was added.")}</p>
+      ${emailTemplateName ? `<p><strong>Email template:</strong> ${escapeHtml(emailTemplateName)}</p>` : ""}
+      <p><strong>Message:</strong></p>
+      <p>${escapeHtml(combinedFeedback || feedback || "No additional feedback was added.")}</p>
       <p><a href="${chapterFlowUrl}">Sign in to ChapterFlow</a></p>
       <p>Best wishes,<br />The ChapterFlow editorial team</p>
     `;

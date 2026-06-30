@@ -54,6 +54,37 @@ type ChapterFlowAppProps = {
   chapters: ChapterRecord[];
 };
 
+const reviewEmailTemplates = [
+  {
+    id: "proposal-approved-first-draft",
+    label: "Proposal approved - first draft guidance",
+    subject: "Your chapter proposal has been approved",
+    body:
+      "Thank you for your proposal. We are pleased to invite you to prepare your first draft for the edited collection.\n\nFirst draft guidance:\n- Submit your chapter as a Microsoft Word document (.docx).\n- Aim for 5,000 to 7,000 words, excluding references.\n- Use clear, accessible, story-led writing rooted in your lived leadership experience.\n- Connect your experience lightly to relevant leadership ideas, professional reading, or research where helpful.\n\nFormatting guidance:\n- Font: Times New Roman, 12 point.\n- Line spacing: 1.5.\n- Margins: standard/normal margins.\n- Referencing: APA 7th Edition for any sources cited.\n\nSuggested heading structure:\n1. Chapter title\n2. Author name, role, institution, and contact details\n3. Short chapter overview\n4. Introduction to the leadership story or experience\n5. School context and rationale\n6. What happened: decisions, tensions, and learning\n7. Practical implications for international school leaders\n8. Reflection and concluding recommendations\n9. References"
+  },
+  {
+    id: "proposal-improvements",
+    label: "Proposal needs improvements",
+    subject: "Feedback on your chapter proposal",
+    body:
+      "Thank you for submitting your chapter proposal. We can see the potential in the idea, but we would like you to revise and strengthen the proposal before a final decision is made.\n\nPlease use the feedback below to clarify the focus of the chapter, the leadership story or experience you plan to draw on, and what other international school leaders might learn from it."
+  },
+  {
+    id: "proposal-not-selected",
+    label: "Proposal not selected",
+    subject: "Update on your chapter proposal",
+    body:
+      "Thank you for taking the time to submit a chapter proposal. After review, we are not able to take this proposal forward for the current edited collection.\n\nWe appreciate the care and thought that went into your submission."
+  },
+  {
+    id: "general-editorial-feedback",
+    label: "General editorial feedback",
+    subject: "Editorial feedback on your ChapterFlow submission",
+    body:
+      "Thank you for your submission. Please review the editorial feedback below and use it to guide your next revision or next stage of work."
+  }
+];
+
 const fallbackBook: BookRecord = {
   id: "",
   title: "ChapterFlow",
@@ -432,13 +463,36 @@ function ReviewWorkspace({
 }
 
 function ReviewForm({ book, chapter }: { book: BookRecord; chapter: ChapterRecord }) {
+  const defaultTemplate = chapter.status === "revision_requested" ? "proposal-improvements" : "proposal-approved-first-draft";
+  const [decision, setDecision] = useState("approved");
+  const [selectedTemplateId, setSelectedTemplateId] = useState(defaultTemplate);
+  const [feedback, setFeedback] = useState("");
+  const selectedTemplate = reviewEmailTemplates.find((template) => template.id === selectedTemplateId) ?? reviewEmailTemplates[0];
+
+  function updateDecision(nextDecision: string) {
+    setDecision(nextDecision);
+    if (nextDecision === "approved") setSelectedTemplateId("proposal-approved-first-draft");
+    if (nextDecision === "revision_requested") setSelectedTemplateId("proposal-improvements");
+    if (nextDecision === "rejected") setSelectedTemplateId("proposal-not-selected");
+  }
+
   return (
     <form action={reviewProposal}>
       <input type="hidden" name="book_id" value={book.id} />
       <input type="hidden" name="chapter_id" value={chapter.id} />
-      <label>Decision<select name="decision" defaultValue="approved"><option value="approved">Approve proposal</option><option value="revision_requested">Request improvements</option><option value="rejected">Reject proposal</option></select></label>
-      <label>Feedback to author<textarea name="feedback" placeholder="Write the feedback or instruction that should be recorded for this author." /></label>
-      <div className="email-draft"><strong>Notification preview</strong><p>If you notify the author, ChapterFlow will email the decision, your feedback, the next deadline, and a link back to the platform.</p><p>Approved proposals move to first draft and show the first draft deadline: {formatDate(book.first_draft_deadline)}.</p></div>
+      <input type="hidden" name="email_template_name" value={selectedTemplate.label} />
+      <input type="hidden" name="email_subject" value={selectedTemplate.subject} />
+      <input type="hidden" name="email_template_body" value={selectedTemplate.body} />
+      <label>Decision<select name="decision" value={decision} onChange={(event) => updateDecision(event.target.value)}><option value="approved">Approve proposal</option><option value="revision_requested">Request improvements</option><option value="rejected">Reject proposal</option></select></label>
+      <label>Email template<select value={selectedTemplateId} onChange={(event) => setSelectedTemplateId(event.target.value)}>{reviewEmailTemplates.map((template) => <option key={template.id} value={template.id}>{template.label}</option>)}</select></label>
+      <label>Additional feedback to author<textarea name="feedback" value={feedback} onChange={(event) => setFeedback(event.target.value)} placeholder="Add specific feedback for this author. It will be added beneath the selected template." /></label>
+      <div className="email-draft">
+        <strong>Email preview</strong>
+        <p><strong>Subject:</strong> {selectedTemplate.subject}</p>
+        <pre>{selectedTemplate.body}</pre>
+        {feedback ? <p><strong>Additional feedback:</strong><br />{feedback}</p> : null}
+        <p>Approved proposals move to first draft and show the first draft deadline: {formatDate(book.first_draft_deadline)}.</p>
+      </div>
       <ReviewButtons />
     </form>
   );
