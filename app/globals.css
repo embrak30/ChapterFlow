@@ -20,6 +20,8 @@ button, input, select, textarea { font: inherit; }
 button { border: 1px solid var(--line); border-radius: 7px; background: #fff; color: var(--ink); cursor: pointer; font-weight: 700; padding: .72rem .9rem; }
 button.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
 button.primary:hover { background: var(--brand-dark); }
+button:disabled { cursor: wait; opacity: .72; }
+button.notify-button.sending { background: var(--warn); border-color: var(--warn); color: #fff; opacity: 1; }
 main { min-height: 100vh; padding: 1.25rem; }
 .topbar { align-items: center; display: flex; gap: 1rem; justify-content: space-between; margin: 0 auto 1.25rem; max-width: 1500px; }
 .top-actions, .auth-box { align-items: center; display: flex; gap: .65rem; }

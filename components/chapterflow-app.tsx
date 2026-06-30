@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useFormStatus } from "react-dom";
 import { reviewProposal, saveCallSettings, submitProposal } from "@/app/actions";
 import { AuthButtons } from "@/components/auth-buttons";
 import { workflowStages } from "@/lib/sample-data";
@@ -438,11 +439,23 @@ function ReviewForm({ book, chapter }: { book: BookRecord; chapter: ChapterRecor
       <label>Decision<select name="decision" defaultValue="approved"><option value="approved">Approve proposal</option><option value="revision_requested">Request improvements</option><option value="rejected">Reject proposal</option></select></label>
       <label>Feedback to author<textarea name="feedback" placeholder="Write the feedback or instruction that should be recorded for this author." /></label>
       <div className="email-draft"><strong>Notification preview</strong><p>If you notify the author, ChapterFlow will email the decision, your feedback, the next deadline, and a link back to the platform.</p><p>Approved proposals move to first draft and show the first draft deadline: {formatDate(book.first_draft_deadline)}.</p></div>
-      <div className="button-row">
-        <button type="submit" name="_action" value="save">Save decision only</button>
-        <button className="primary" type="submit" name="_action" value="notify">Save and send notification</button>
-      </div>
+      <ReviewButtons />
     </form>
+  );
+}
+
+function ReviewButtons() {
+  const { pending } = useFormStatus();
+
+  return (
+    <div className="button-row">
+      <button disabled={pending} type="submit" name="_action" value="save">
+        {pending ? "Saving..." : "Save decision only"}
+      </button>
+      <button className={`primary notify-button ${pending ? "sending" : ""}`} disabled={pending} type="submit" name="_action" value="notify">
+        {pending ? "Sending notification..." : "Save and send notification"}
+      </button>
+    </div>
   );
 }
 
