@@ -47,7 +47,7 @@ export default async function Home() {
 
   const { data: chapters } = await supabase
     .from("chapters")
-    .select("*, profiles:author_id(full_name, email), submissions(*)")
+    .select("*, profiles:author_id(full_name, email), submissions(*), reviews(*)")
     .order("created_at", { ascending: false });
 
   return (

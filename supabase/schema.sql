@@ -169,6 +169,11 @@ returns boolean language sql security definer set search_path = public as $$
   );
 $$;
 
+create or replace function public.is_facilitator()
+returns boolean language sql security definer set search_path = public as $$
+  select exists (select 1 from public.profiles where id = auth.uid() and role::text = 'facilitator');
+$$;
+
 drop policy if exists "Admins can manage all profiles" on public.profiles;
 create policy "Admins can manage all profiles" on public.profiles using (public.is_admin());
 drop policy if exists "Users can view their own profile" on public.profiles;
@@ -186,6 +191,8 @@ create policy "Facilitators can view assigned author profiles" on public.profile
       and public.is_facilitator_for(c.book_id)
   )
 );
+drop policy if exists "Facilitators can view all profiles" on public.profiles;
+create policy "Facilitators can view all profiles" on public.profiles for select using (public.is_facilitator());
 drop policy if exists "Admins can manage books" on public.books;
 create policy "Admins can manage books" on public.books using (public.is_admin());
 drop policy if exists "Authors can view books" on public.books;
@@ -194,6 +201,8 @@ drop policy if exists "Admins can manage chapters" on public.chapters;
 create policy "Admins can manage chapters" on public.chapters using (public.is_admin());
 drop policy if exists "Facilitators can view assigned chapters" on public.chapters;
 create policy "Facilitators can view assigned chapters" on public.chapters for select using (public.is_facilitator_for(book_id));
+drop policy if exists "Facilitators can view all chapters" on public.chapters;
+create policy "Facilitators can view all chapters" on public.chapters for select using (public.is_facilitator());
 drop policy if exists "Authors can view their chapters" on public.chapters;
 create policy "Authors can view their chapters" on public.chapters for select using (author_id = auth.uid());
 drop policy if exists "Authors can create chapters" on public.chapters;
@@ -209,6 +218,8 @@ create policy "Facilitators can view assigned submissions" on public.submissions
       and public.is_facilitator_for(c.book_id)
   )
 );
+drop policy if exists "Facilitators can view all submissions" on public.submissions;
+create policy "Facilitators can view all submissions" on public.submissions for select using (public.is_facilitator());
 drop policy if exists "Authors can manage their submissions" on public.submissions;
 create policy "Authors can manage their submissions" on public.submissions using (submitted_by = auth.uid()) with check (submitted_by = auth.uid());
 drop policy if exists "Admins can manage submission files" on public.submission_files;
@@ -229,28 +240,24 @@ create policy "Facilitators can view assigned submission files" on public.submis
       and public.is_facilitator_for(c.book_id)
   )
 );
+drop policy if exists "Facilitators can view all submission files" on public.submission_files;
+create policy "Facilitators can view all submission files" on public.submission_files for select using (public.is_facilitator());
 drop policy if exists "Admins can manage reviews" on public.reviews;
 create policy "Admins can manage reviews" on public.reviews using (public.is_admin());
 drop policy if exists "Facilitators can review assigned chapters" on public.reviews;
-create policy "Facilitators can review assigned chapters" on public.reviews using (
-  exists (select 1 from public.chapters c where c.id = reviews.chapter_id and public.is_facilitator_for(c.book_id))
-) with check (
-  reviewer_id = auth.uid()
-  and exists (select 1 from public.chapters c where c.id = reviews.chapter_id and public.is_facilitator_for(c.book_id))
-);
+drop policy if exists "Facilitators can read all reviews" on public.reviews;
+create policy "Facilitators can read all reviews" on public.reviews for select using (public.is_facilitator());
 drop policy if exists "Authors can read reviews for their chapters" on public.reviews;
 create policy "Authors can read reviews for their chapters" on public.reviews for select using (exists (select 1 from public.chapters c where c.id = reviews.chapter_id and c.author_id = auth.uid()));
 drop policy if exists "Admins can manage email logs" on public.email_logs;
 create policy "Admins can manage email logs" on public.email_logs using (public.is_admin()) with check (public.is_admin());
 drop policy if exists "Facilitators can create assigned email logs" on public.email_logs;
-create policy "Facilitators can create assigned email logs" on public.email_logs for insert with check (
-  sent_by = auth.uid()
-  and exists (select 1 from public.chapters c where c.id = email_logs.chapter_id and public.is_facilitator_for(c.book_id))
-);
 drop policy if exists "Facilitators can read assigned email logs" on public.email_logs;
 create policy "Facilitators can read assigned email logs" on public.email_logs for select using (
   exists (select 1 from public.chapters c where c.id = email_logs.chapter_id and public.is_facilitator_for(c.book_id))
 );
+drop policy if exists "Facilitators can read all email logs" on public.email_logs;
+create policy "Facilitators can read all email logs" on public.email_logs for select using (public.is_facilitator());
 drop policy if exists "Authors can read email logs for their chapters" on public.email_logs;
 create policy "Authors can read email logs for their chapters" on public.email_logs for select using (
   exists (select 1 from public.chapters c where c.id = email_logs.chapter_id and c.author_id = auth.uid())

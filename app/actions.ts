@@ -202,8 +202,8 @@ export async function reviewProposal(formData: FormData) {
   const { supabase, user, profile } = await getSignedInProfile();
   const role = String(profile.role);
 
-  if (!["admin", "editor", "facilitator"].includes(role)) {
-    throw new Error("Only administrators and facilitators can review proposals.");
+  if (!["admin", "editor"].includes(role)) {
+    throw new Error("Only administrators can review proposals and send decisions.");
   }
 
   const chapterId = textValue(formData, "chapter_id");

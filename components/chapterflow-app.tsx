@@ -32,6 +32,13 @@ type SubmissionRecord = {
   created_at: string;
 };
 
+type ReviewRecord = {
+  id: string;
+  decision: string;
+  feedback: string | null;
+  created_at: string;
+};
+
 type ChapterRecord = {
   id: string;
   book_id: string;
@@ -44,6 +51,7 @@ type ChapterRecord = {
   created_at: string;
   profiles?: { full_name: string | null; email: string | null } | null;
   submissions?: SubmissionRecord[];
+  reviews?: ReviewRecord[];
 };
 
 type ChapterFlowAppProps = {
@@ -160,7 +168,7 @@ export function ChapterFlowApp({ userEmail, userName, userRole, books, chapters 
       {role === "admin" && canViewAdmin ? (
         <AdminView book={selectedBook} books={books} chapters={bookChapters} stats={stats} />
       ) : role === "facilitator" && canViewFacilitator ? (
-        <ReviewWorkspace title="Facilitator Review Queue" book={selectedBook} chapters={bookChapters} canDecide />
+        <FacilitatorView book={selectedBook} chapters={bookChapters} stats={stats} />
       ) : role === "author" && isSignedIn ? (
         <AuthorView book={selectedBook} userName={userName} userEmail={userEmail} chapter={authorChapter} />
       ) : (
@@ -393,6 +401,42 @@ function AdminView({
   );
 }
 
+function FacilitatorView({
+  book,
+  chapters,
+  stats
+}: {
+  book: BookRecord;
+  chapters: ChapterRecord[];
+  stats: Array<{ label: string; value: number }>;
+}) {
+  const stageCounts = [
+    { label: "Proposal stage", value: chapters.filter((chapter) => chapter.stage.includes("proposal")).length },
+    { label: "First drafts", value: chapters.filter((chapter) => chapter.stage === "first_draft").length },
+    { label: "Second drafts", value: chapters.filter((chapter) => chapter.stage === "second_draft").length },
+    { label: "Final materials", value: chapters.filter((chapter) => chapter.stage === "final_materials" || chapter.stage === "complete").length }
+  ];
+
+  return (
+    <section className="workspace">
+      <aside className="panel sidebar">
+        <div className="section-heading">
+          <p className="eyebrow">Facilitator Overview</p>
+          <h2>Read-only project tracking</h2>
+          <p className="muted">Facilitators can see projects, proposals, stages, timelines, and decisions. Approval, rejection, and email notifications remain admin-only.</p>
+        </div>
+        <div className="stat-grid">{stats.map((stat) => <div className="stat" key={stat.label}><strong>{stat.value}</strong><span>{stat.label}</span></div>)}</div>
+        <div className="admin-tools">
+          <h3>Project timeline</h3>
+          <DeadlineStrip book={book} />
+        </div>
+        <div className="stat-grid">{stageCounts.map((stat) => <div className="stat" key={stat.label}><strong>{stat.value}</strong><span>{stat.label}</span></div>)}</div>
+      </aside>
+      <ReviewWorkspace title="Facilitator Oversight Board" book={book} chapters={chapters} canDecide={false} />
+    </section>
+  );
+}
+
 function CallSettingsForm({ book, hasBooks }: { book?: BookRecord; hasBooks: boolean }) {
   return (
     <form action={saveCallSettings} className="admin-tools">
@@ -452,6 +496,7 @@ function ReviewWorkspace({
             <div className="section-heading"><p className="eyebrow">Proposal review</p><h2>{selected.title}</h2></div>
             <div className="meta-list"><p><strong>Author</strong>{selected.profiles?.full_name || selected.profiles?.email || "Author"}</p><p><strong>Current stage</strong>{displayStatus(selected.stage)}</p><p><strong>Deadline</strong>{formatDate(selected.current_deadline)}</p></div>
             <div className="document-preview"><span>Story proposal</span><p>{selected.proposal_outline || selected.abstract || "No proposal text supplied."}</p></div>
+            <ReviewHistory reviews={selected.reviews ?? []} />
             {canDecide ? <ReviewForm book={book} chapter={selected} /> : null}
           </>
         ) : (
@@ -459,6 +504,21 @@ function ReviewWorkspace({
         )}
       </aside>
     </>
+  );
+}
+
+function ReviewHistory({ reviews }: { reviews: ReviewRecord[] }) {
+  return (
+    <div className="review-history">
+      <strong>Decision history</strong>
+      {reviews.length ? reviews.map((review) => (
+        <div className="review-note" key={review.id}>
+          <span className={statusClass(review.decision)}>{displayStatus(review.decision)}</span>
+          <small>{formatDate(review.created_at)}</small>
+          {review.feedback ? <p>{review.feedback}</p> : null}
+        </div>
+      )) : <p className="muted">No decisions have been recorded yet.</p>}
+    </div>
   );
 }
 

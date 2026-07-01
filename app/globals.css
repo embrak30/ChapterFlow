@@ -69,6 +69,9 @@ h2 { font-size: 1.1rem; line-height: 1.25; }
 .meta-list strong { color: var(--ink); }
 .document-preview { background: #f2f5f8; border: 1px dashed #aeb9c8; border-radius: 8px; display: grid; gap: .75rem; margin-bottom: 1rem; min-height: 190px; padding: 1rem; }
 .document-preview span { color: var(--brand); font-weight: 800; }
+.review-history { border: 1px solid var(--line); border-radius: 8px; display: grid; gap: .65rem; margin-bottom: 1rem; padding: .85rem; }
+.review-note { border-top: 1px solid var(--line); display: grid; gap: .4rem; padding-top: .65rem; }
+.review-note small, .review-note p { color: var(--muted); font-size: .88rem; }
 label { display: grid; gap: .45rem; font-size: .88rem; font-weight: 800; margin-bottom: .9rem; }
 input, select, textarea { border: 1px solid var(--line); border-radius: 7px; color: var(--ink); padding: .78rem .85rem; width: 100%; }
 textarea { min-height: 110px; resize: vertical; }
