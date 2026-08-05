@@ -384,6 +384,8 @@ function AdminView({
   chapters: ChapterRecord[];
   stats: Array<{ label: string; value: number }>;
 }) {
+  const approvedChapters = chapters.filter((chapter) => chapter.status === "approved" || !chapter.stage.includes("proposal"));
+
   return (
     <section className="workspace">
       <aside className="panel sidebar">
@@ -394,10 +396,56 @@ function AdminView({
         </div>
         <div className="stat-grid">{stats.map((stat) => <div className="stat" key={stat.label}><strong>{stat.value}</strong><span>{stat.label}</span></div>)}</div>
         <CallSettingsForm book={book.id ? book : undefined} hasBooks={books.length > 0} />
+        <ApprovedAuthorsPanel chapters={approvedChapters} />
         <div className="stage-list">{workflowStages.map((stage) => <div className="stage" key={stage.name}><span>{stage.name}</span><small>{stage.owner}</small></div>)}</div>
       </aside>
       <ReviewWorkspace title="Admin Proposal Board" book={book} chapters={chapters} canDecide />
     </section>
+  );
+}
+
+function ApprovedAuthorsPanel({ chapters }: { chapters: ChapterRecord[] }) {
+  const approvedAuthors = chapters
+    .map((chapter) => ({
+      id: chapter.id,
+      title: chapter.title,
+      name: chapter.profiles?.full_name || "Author",
+      email: chapter.profiles?.email || ""
+    }))
+    .filter((author) => author.email);
+  const emailList = approvedAuthors.map((author) => author.email).join(", ");
+  const mailtoHref = emailList ? `mailto:?bcc=${encodeURIComponent(emailList)}&subject=${encodeURIComponent("ChapterFlow update for approved authors")}` : "";
+
+  async function copyEmails() {
+    if (!emailList) return;
+    await navigator.clipboard.writeText(emailList);
+  }
+
+  return (
+    <div className="admin-tools approved-authors">
+      <div>
+        <h3>Approved authors</h3>
+        <p className="muted">{approvedAuthors.length ? `${approvedAuthors.length} approved author${approvedAuthors.length === 1 ? "" : "s"} with email addresses.` : "Approved author emails will appear here."}</p>
+      </div>
+      {approvedAuthors.length ? (
+        <>
+          <div className="author-contact-list">
+            {approvedAuthors.map((author) => (
+              <div className="author-contact" key={author.id}>
+                <strong>{author.name}</strong>
+                <span>{author.email}</span>
+                <small>{author.title}</small>
+              </div>
+            ))}
+          </div>
+          <textarea readOnly value={emailList} aria-label="Approved author email addresses" />
+          <div className="button-row">
+            <button type="button" onClick={copyEmails}>Copy email list</button>
+            <a className="button-link" href={mailtoHref}>Open email draft</a>
+          </div>
+        </>
+      ) : null}
+    </div>
   );
 }
 

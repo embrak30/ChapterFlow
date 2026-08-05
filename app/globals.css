@@ -22,6 +22,7 @@ button.primary { background: var(--brand); border-color: var(--brand); color: #f
 button.primary:hover { background: var(--brand-dark); }
 button:disabled { cursor: wait; opacity: .72; }
 button.notify-button.sending { background: var(--warn); border-color: var(--warn); color: #fff; opacity: 1; }
+a.button-link { align-items: center; background: var(--brand); border: 1px solid var(--brand); border-radius: 7px; color: #fff; display: inline-flex; font-weight: 700; justify-content: center; padding: .72rem .9rem; text-decoration: none; }
 main { min-height: 100vh; padding: 1.25rem; }
 .topbar { align-items: center; display: flex; gap: 1rem; justify-content: space-between; margin: 0 auto 1.25rem; max-width: 1500px; }
 .top-actions, .auth-box { align-items: center; display: flex; gap: .65rem; }
@@ -46,6 +47,10 @@ h2 { font-size: 1.1rem; line-height: 1.25; }
 .stage-list { display: grid; gap: .45rem; }
 .admin-tools, .call-details { background: #f7fafc; border: 1px solid var(--line); border-radius: 8px; display: grid; gap: .75rem; margin-bottom: 1rem; padding: .85rem; }
 .admin-tools h3 { font-size: .95rem; }
+.approved-authors textarea { min-height: 74px; }
+.author-contact-list { display: grid; gap: .55rem; max-height: 230px; overflow: auto; }
+.author-contact { background: #fff; border: 1px solid var(--line); border-radius: 7px; display: grid; gap: .2rem; padding: .65rem; }
+.author-contact span, .author-contact small { color: var(--muted); font-size: .84rem; overflow-wrap: anywhere; }
 .call-details { color: var(--muted); }
 .call-details ul { margin: 0; padding-left: 1.15rem; }
 .stage { align-items: center; border-top: 1px solid var(--line); display: flex; justify-content: space-between; padding: .65rem 0; }
