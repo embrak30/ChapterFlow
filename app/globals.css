@@ -87,6 +87,12 @@ textarea { min-height: 110px; resize: vertical; }
 .public-view, .author-view { display: grid; gap: 1rem; margin: 0 auto; max-width: 1180px; }
 .intro-band { background: #dfeaf3; border: 1px solid #c5d7e6; border-radius: 8px; display: grid; gap: .8rem; padding: clamp(1rem, 3vw, 2rem); }
 .intro-band h2 { font-size: clamp(1.6rem, 3vw, 2.7rem); max-width: 900px; }
+.second-call-panel { align-items: center; display: grid; gap: 1.25rem; grid-template-columns: minmax(0, 1fr) minmax(240px, .55fr); }
+.second-call-copy { display: grid; gap: .75rem; }
+.second-call-copy h2 { font-size: clamp(1.35rem, 2vw, 2rem); }
+.second-call-copy p { color: var(--muted); line-height: 1.55; }
+.second-call-copy strong { color: var(--ink); }
+.second-call-graphic { border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow); width: 100%; }
 .call-grid, .author-grid, .form-grid { display: grid; gap: 1rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .call-card, .deadline-card { display: grid; gap: 1rem; }
 .deadline-card .notice { margin-top: 0; }
@@ -117,4 +123,4 @@ textarea { min-height: 110px; resize: vertical; }
 .notice { background: #e7f6ee; border: 1px solid #b7dfc7; border-radius: 7px; color: var(--good); font-size: .9rem; font-weight: 700; margin-top: .85rem; padding: .75rem; }
 .timeline ol { color: var(--muted); margin: 0; padding-left: 1.25rem; }
 @media (max-width: 1180px) { .workspace { grid-template-columns: 1fr; } .sidebar { display: grid; gap: 1rem; grid-template-columns: 1fr 1fr; } }
-@media (max-width: 760px) { main { padding: .75rem; } .topbar, .author-summary, .top-actions, .auth-box { align-items: stretch; flex-direction: column; } .role-switch { width: 100%; } .role-switch button { flex: 1; } .sidebar, .author-grid, .call-grid, .form-grid, .guidance-grid, .proposal-form-grid, .date-strip { grid-template-columns: 1fr; } }
+@media (max-width: 760px) { main { padding: .75rem; } .topbar, .author-summary, .top-actions, .auth-box { align-items: stretch; flex-direction: column; } .role-switch { width: 100%; } .role-switch button { flex: 1; } .sidebar, .author-grid, .call-grid, .form-grid, .guidance-grid, .proposal-form-grid, .date-strip, .second-call-panel { grid-template-columns: 1fr; } }

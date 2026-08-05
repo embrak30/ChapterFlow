@@ -186,6 +186,26 @@ function PublicView({ book, isSignedIn }: { book: BookRecord; isSignedIn: boolea
         <h2>{book.title}</h2>
         <p>{book.call_summary || book.description || "Create an account to view the call and submit your chapter proposal."}</p>
       </div>
+      <article className="panel second-call-panel">
+        <div className="second-call-copy">
+          <p className="eyebrow">Second call now open</p>
+          <h2>Thank you for the interest so far</h2>
+          <p>
+            We have been encouraged by the response to this project and are now inviting a second round of chapter proposals.
+            This call is for story-led chapters that share real leadership experiences connected to Mission Integrity in
+            international schools.
+          </p>
+          <p>
+            If you would like to contribute, please create an account or sign in, then submit your chapter title and short
+            proposal by <strong>August 31</strong>.
+          </p>
+        </div>
+        <img
+          className="second-call-graphic"
+          src="/second-call-for-chapters-august-31.png"
+          alt="Second Call for Chapters: Leadership With Mission Integrity. Deadline: August 31."
+        />
+      </article>
       <article className="panel deadline-card">
         <div className="section-heading">
           <p className="eyebrow">Key dates</p>
