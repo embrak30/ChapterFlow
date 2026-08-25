@@ -111,7 +111,7 @@ textarea { min-height: 110px; resize: vertical; }
 .date-strip span { background: #f7fafc; border: 1px solid var(--line); border-radius: 7px; color: var(--muted); display: grid; gap: .25rem; padding: .7rem; }
 .date-strip strong { color: var(--ink); }
 .author-summary { align-items: center; display: flex; gap: 1rem; justify-content: space-between; }
-.author-deadlines, .proposal-panel { grid-column: 1 / -1; }
+.author-deadlines, .proposal-panel, .submissions-panel { grid-column: 1 / -1; }
 .author-deadlines { display: grid; gap: .8rem; }
 .proposal-panel form { display: grid; gap: .9rem; }
 .proposal-panel .muted { margin-bottom: 0; }
@@ -120,7 +120,18 @@ textarea { min-height: 110px; resize: vertical; }
 .proposal-form-grid label:nth-child(3), .proposal-form-grid label:nth-child(4) { align-self: stretch; }
 .proposal-form-grid textarea { min-height: 150px; }
 .draft-panel .empty-state { min-height: 160px; }
+.submissions-panel { display: grid; gap: 1rem; }
+.submission-list { display: grid; gap: .85rem; }
+.submission-card { border: 1px solid var(--line); border-radius: 8px; display: grid; gap: .75rem; padding: 1rem; }
+.submission-card-header { align-items: flex-start; display: flex; gap: 1rem; justify-content: space-between; }
+.submission-card-header h3 { font-size: 1rem; }
+.submission-card-header span, .submission-card p { color: var(--muted); font-size: .9rem; line-height: 1.5; }
+.submission-card p { display: grid; gap: .25rem; margin: 0; }
+.submission-card strong { color: var(--ink); }
+.file-list { display: grid; gap: .5rem; }
+.file-row { align-items: center; background: #f7fafc; border: 1px solid var(--line); border-radius: 7px; display: flex; gap: .75rem; justify-content: space-between; padding: .7rem; }
+.file-row span:first-child { color: var(--ink); font-weight: 800; overflow-wrap: anywhere; }
 .notice { background: #e7f6ee; border: 1px solid #b7dfc7; border-radius: 7px; color: var(--good); font-size: .9rem; font-weight: 700; margin-top: .85rem; padding: .75rem; }
 .timeline ol { color: var(--muted); margin: 0; padding-left: 1.25rem; }
 @media (max-width: 1180px) { .workspace { grid-template-columns: 1fr; } .sidebar { display: grid; gap: 1rem; grid-template-columns: 1fr 1fr; } }
-@media (max-width: 760px) { main { padding: .75rem; } .topbar, .author-summary, .top-actions, .auth-box { align-items: stretch; flex-direction: column; } .role-switch { width: 100%; } .role-switch button { flex: 1; } .sidebar, .author-grid, .call-grid, .form-grid, .guidance-grid, .proposal-form-grid, .date-strip, .second-call-panel { grid-template-columns: 1fr; } }
+@media (max-width: 760px) { main { padding: .75rem; } .topbar, .author-summary, .top-actions, .auth-box, .submission-card-header, .file-row { align-items: stretch; flex-direction: column; } .role-switch { width: 100%; } .role-switch button { flex: 1; } .sidebar, .author-grid, .call-grid, .form-grid, .guidance-grid, .proposal-form-grid, .date-strip, .second-call-panel { grid-template-columns: 1fr; } }

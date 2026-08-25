@@ -27,8 +27,20 @@ type SubmissionRecord = {
   id: string;
   stage: string;
   title: string | null;
+  abstract: string | null;
   proposal_outline: string | null;
   author_biography: string | null;
+  response_to_feedback: string | null;
+  created_at: string;
+  submission_files?: SubmissionFileRecord[];
+};
+
+type SubmissionFileRecord = {
+  id: string;
+  storage_path: string;
+  file_name: string;
+  content_type: string | null;
+  byte_size: number | null;
   created_at: string;
 };
 
@@ -345,6 +357,10 @@ function AuthorView({
 }) {
   const proposalApproved = chapter?.status === "approved" || chapter?.stage === "first_draft";
   const hasProposal = Boolean(chapter);
+  const submissions = [...(chapter?.submissions ?? [])].sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  );
+  const hasDraftFile = submissions.some((submission) => (submission.submission_files ?? []).length > 0);
 
   return (
     <section className="author-view">
@@ -384,9 +400,58 @@ function AuthorView({
         <section className="panel draft-panel">
           <div className="section-heading"><p className="eyebrow">Next stage</p><h2>First draft manuscript</h2></div>
           <div className="empty-state">
-            <h2>{proposalApproved ? "Ready for draft upload" : "Locked until proposal approval"}</h2>
-            <p className="muted">Authors will upload a Word document here once the proposal has been approved and the first draft deadline is active.</p>
+            <h2>{hasDraftFile ? "Draft received" : proposalApproved ? "Ready for draft upload" : "Locked until proposal approval"}</h2>
+            <p className="muted">
+              {hasDraftFile
+                ? "Your submitted draft file is listed below in your submitted work."
+                : proposalApproved
+                  ? "Draft upload is not yet active on ChapterFlow. If you have already sent a draft to the editor, it may not appear here until file upload is connected."
+                  : "Authors will upload a Word document here once the proposal has been approved and the first draft deadline is active."}
+            </p>
           </div>
+        </section>
+        <section className="panel submissions-panel">
+          <div className="section-heading">
+            <p className="eyebrow">Your records</p>
+            <h2>Submitted work and feedback</h2>
+            <p className="muted">This is the work ChapterFlow currently has recorded against your author profile.</p>
+          </div>
+          {submissions.length ? (
+            <div className="submission-list">
+              {submissions.map((submission) => (
+                <article className="submission-card" key={submission.id}>
+                  <div className="submission-card-header">
+                    <div>
+                      <p className="eyebrow">{displayStatus(submission.stage)}</p>
+                      <h3>{submission.title || chapter?.title || "Submitted chapter work"}</h3>
+                    </div>
+                    <span>{formatDate(submission.created_at)}</span>
+                  </div>
+                  {submission.abstract ? <p><strong>Overview</strong>{submission.abstract}</p> : null}
+                  {submission.proposal_outline ? <p><strong>Proposal</strong>{submission.proposal_outline}</p> : null}
+                  {submission.response_to_feedback ? <p><strong>Response to feedback</strong>{submission.response_to_feedback}</p> : null}
+                  {(submission.submission_files ?? []).length ? (
+                    <div className="file-list">
+                      {(submission.submission_files ?? []).map((file) => {
+                        const canOpenFile = file.storage_path.startsWith("http://") || file.storage_path.startsWith("https://");
+                        return (
+                          <div className="file-row" key={file.id}>
+                            <span>{file.file_name}</span>
+                            {canOpenFile ? <a className="button-link" href={file.storage_path} target="_blank" rel="noreferrer">View file</a> : <span className="muted">File stored securely</span>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="empty-state">
+              <h2>No submissions recorded yet</h2>
+              <p className="muted">Once you submit a proposal or draft through ChapterFlow, it will appear here.</p>
+            </div>
+          )}
         </section>
       </div>
     </section>
