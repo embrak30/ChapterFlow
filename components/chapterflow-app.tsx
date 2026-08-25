@@ -102,6 +102,13 @@ const reviewEmailTemplates = [
     subject: "Editorial feedback on your ChapterFlow submission",
     body:
       "Thank you for your submission. Please review the editorial feedback below and use it to guide your next revision or next stage of work."
+  },
+  {
+    id: "september-writer-momentum",
+    label: "September 1 - two-month writing reminder",
+    subject: "Two-month writing reminder for your chapter",
+    body:
+      "I hope your chapter is beginning to take shape and that you are finding space to develop the story, reflection, and practical learning you want to share.\n\nSeptember 1 marks roughly the two-month point in our writing window, so this is a gentle reminder to keep the chapter moving. At this stage, you may not have a finished draft, but it would be helpful to have a clear direction, a working structure, and some early writing underway.\n\nPlease also look out for a forthcoming invitation to a short author meeting/webinar on getting your chapter ready. The session will offer guidance on structure, tone, expectations, and the next steps in the editorial process.\n\nIf you are unsure about the direction of your chapter, have hit a difficulty, or think you may need support with the timeline, please do get in touch early. We want this to be a thoughtful and supportive process, and it is much easier to help when we know what is happening.\n\nThank you again for being part of this project. Your contribution matters, and I am looking forward to seeing these chapters develop into a strong collection of real leadership stories from the field."
   }
 ];
 
