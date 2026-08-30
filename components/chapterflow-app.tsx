@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useFormStatus } from "react-dom";
-import { reviewProposal, saveCallSettings, submitProposal } from "@/app/actions";
+import { generatePeerReviewAssignments, reviewProposal, saveCallSettings, savePeerReviewSettings, sendPeerReviewReminders, submitPeerReview, submitProposal } from "@/app/actions";
 import { AuthButtons } from "@/components/auth-buttons";
 import { workflowStages } from "@/lib/sample-data";
 
@@ -66,12 +66,49 @@ type ChapterRecord = {
   reviews?: ReviewRecord[];
 };
 
+type PeerReviewSettingsRecord = {
+  id: string;
+  book_id: string;
+  is_open: boolean;
+  review_deadline: string | null;
+  instructions: string | null;
+};
+
+type PeerReviewRecord = {
+  id: string;
+  assignment_id: string;
+  structure_feedback: string | null;
+  mission_alignment_feedback: string | null;
+  story_feedback: string | null;
+  practical_value_feedback: string | null;
+  evidence_feedback: string | null;
+  recommendations: string | null;
+  overall_recommendation: string | null;
+  created_at: string;
+};
+
+type PeerReviewAssignmentRecord = {
+  id: string;
+  book_id: string;
+  chapter_id: string;
+  reviewer_id: string;
+  status: string;
+  notified_at: string | null;
+  reminder_sent_at: string | null;
+  created_at: string;
+  reviewer?: { full_name: string | null; email: string | null } | Array<{ full_name: string | null; email: string | null }> | null;
+  chapter?: ChapterRecord | ChapterRecord[] | null;
+  peer_reviews?: PeerReviewRecord[];
+};
+
 type ChapterFlowAppProps = {
   userEmail?: string | null;
   userName?: string | null;
   userRole?: "admin" | "facilitator" | "author" | null;
   books: BookRecord[];
   chapters: ChapterRecord[];
+  peerReviewSettings: PeerReviewSettingsRecord[];
+  peerReviewAssignments: PeerReviewAssignmentRecord[];
 };
 
 const reviewEmailTemplates = [
@@ -142,7 +179,17 @@ function statusClass(status: string) {
   return `pill ${status.replaceAll("_", "-")}`;
 }
 
-export function ChapterFlowApp({ userEmail, userName, userRole, books, chapters }: ChapterFlowAppProps) {
+function singleRecord<T>(value?: T | T[] | null) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function latestDraftSubmission(chapter?: ChapterRecord | null) {
+  return [...(chapter?.submissions ?? [])]
+    .filter((submission) => submission.stage.includes("draft"))
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
+}
+
+export function ChapterFlowApp({ userEmail, userName, userRole, books, chapters, peerReviewSettings, peerReviewAssignments }: ChapterFlowAppProps) {
   const isSignedIn = Boolean(userEmail);
   const canViewAdmin = userRole === "admin";
   const canViewFacilitator = userRole === "facilitator" || canViewAdmin;
@@ -152,6 +199,10 @@ export function ChapterFlowApp({ userEmail, userName, userRole, books, chapters 
   const visibleBooks = openBooks.length ? openBooks : books;
   const selectedBook = visibleBooks[0] ?? fallbackBook;
   const bookChapters = selectedBook.id ? chapters.filter((chapter) => chapter.book_id === selectedBook.id) : chapters;
+  const selectedPeerReviewSettings = peerReviewSettings.find((settings) => settings.book_id === selectedBook.id);
+  const selectedPeerReviewAssignments = selectedBook.id
+    ? peerReviewAssignments.filter((assignment) => assignment.book_id === selectedBook.id)
+    : peerReviewAssignments;
   const authorChapter = userEmail
     ? bookChapters.find((chapter) => chapter.profiles?.email?.toLowerCase() === userEmail.toLowerCase())
     : undefined;
@@ -185,11 +236,11 @@ export function ChapterFlowApp({ userEmail, userName, userRole, books, chapters 
       </header>
 
       {role === "admin" && canViewAdmin ? (
-        <AdminView book={selectedBook} books={books} chapters={bookChapters} stats={stats} />
+        <AdminView book={selectedBook} books={books} chapters={bookChapters} stats={stats} peerReviewSettings={selectedPeerReviewSettings} peerReviewAssignments={selectedPeerReviewAssignments} />
       ) : role === "facilitator" && canViewFacilitator ? (
         <FacilitatorView book={selectedBook} chapters={bookChapters} stats={stats} />
       ) : role === "author" && isSignedIn ? (
-        <AuthorView book={selectedBook} userName={userName} userEmail={userEmail} chapter={authorChapter} />
+        <AuthorView book={selectedBook} userName={userName} userEmail={userEmail} chapter={authorChapter} peerReviewSettings={selectedPeerReviewSettings} peerReviewAssignments={selectedPeerReviewAssignments} />
       ) : (
         <PublicView book={selectedBook} isSignedIn={isSignedIn} />
       )}
@@ -355,12 +406,16 @@ function AuthorView({
   book,
   userName,
   userEmail,
-  chapter
+  chapter,
+  peerReviewSettings,
+  peerReviewAssignments
 }: {
   book: BookRecord;
   userName?: string | null;
   userEmail?: string | null;
   chapter?: ChapterRecord;
+  peerReviewSettings?: PeerReviewSettingsRecord;
+  peerReviewAssignments: PeerReviewAssignmentRecord[];
 }) {
   const proposalApproved = chapter?.status === "approved" || chapter?.stage === "first_draft";
   const hasProposal = Boolean(chapter);
@@ -368,6 +423,9 @@ function AuthorView({
     (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   );
   const hasDraftFile = submissions.some((submission) => (submission.submission_files ?? []).length > 0);
+  const reviewerAssignments = userEmail
+    ? peerReviewAssignments.filter((assignment) => singleRecord(assignment.reviewer)?.email?.toLowerCase() === userEmail.toLowerCase())
+    : [];
 
   return (
     <section className="author-view">
@@ -460,21 +518,113 @@ function AuthorView({
             </div>
           )}
         </section>
+        {peerReviewSettings?.is_open ? (
+          <PeerReviewAuthorPanel settings={peerReviewSettings} assignments={reviewerAssignments} />
+        ) : null}
       </div>
     </section>
   );
+}
+
+function PeerReviewAuthorPanel({
+  settings,
+  assignments
+}: {
+  settings: PeerReviewSettingsRecord;
+  assignments: PeerReviewAssignmentRecord[];
+}) {
+  return (
+    <section className="panel peer-review-panel">
+      <div className="section-heading">
+        <p className="eyebrow">Blind peer review</p>
+        <h2>Your review assignments</h2>
+        <p className="muted">Please complete two guided reviews. Author names are hidden in this reviewer view.</p>
+      </div>
+      <div className="peer-review-guidance">
+        <strong>Review deadline: {formatDate(settings.review_deadline)}</strong>
+        <p>{settings.instructions || "Focus on helping the author strengthen the chapter structure, connection to Mission Integrity, clarity of the story, practical value, and use of supporting evidence."}</p>
+      </div>
+      {assignments.length ? (
+        <div className="peer-assignment-list">
+          {assignments.map((assignment, index) => (
+            <PeerReviewAssignmentCard assignment={assignment} index={index} key={assignment.id} />
+          ))}
+        </div>
+      ) : (
+        <EmptyState title="No peer review assignments yet" message="When the editor assigns chapters to you, they will appear here." />
+      )}
+    </section>
+  );
+}
+
+function PeerReviewAssignmentCard({ assignment, index }: { assignment: PeerReviewAssignmentRecord; index: number }) {
+  const chapter = singleRecord(assignment.chapter);
+  const existingReview = assignment.peer_reviews?.[0];
+  const draftSubmission = latestDraftSubmission(chapter);
+  const draftFiles = draftSubmission?.submission_files ?? [];
+
+  return (
+    <article className="peer-assignment-card">
+      <div className="submission-card-header">
+        <div>
+          <p className="eyebrow">Assigned chapter {index + 1}</p>
+          <h3>{chapter?.title || "Untitled chapter"}</h3>
+        </div>
+        <span className={statusClass(existingReview ? "complete" : assignment.status)}>{existingReview ? "Review submitted" : displayStatus(assignment.status)}</span>
+      </div>
+      <div className="document-preview compact-preview">
+        <span>Draft available to review</span>
+        {draftFiles.length ? (
+          <div className="file-list">
+            {draftFiles.map((file) => {
+              const canOpenFile = file.storage_path.startsWith("http://") || file.storage_path.startsWith("https://");
+              return (
+                <div className="file-row" key={file.id}>
+                  <span>{file.file_name}</span>
+                  {canOpenFile ? <a className="button-link" href={file.storage_path} target="_blank" rel="noreferrer">View draft</a> : <span className="muted">File stored securely</span>}
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <p>{draftSubmission?.abstract || chapter?.abstract || chapter?.proposal_outline || "No draft file is attached yet. Use the chapter information available here until the editor adds the draft file."}</p>
+        )}
+      </div>
+      <form action={submitPeerReview} className="peer-review-form">
+        <input type="hidden" name="assignment_id" value={assignment.id} />
+        <input type="hidden" name="chapter_id" value={assignment.chapter_id} />
+        <label>Structure and flow<textarea name="structure_feedback" required defaultValue={existingReview?.structure_feedback ?? ""} placeholder="Comment on the chapter shape, sequence, headings, and whether the reader can follow the argument or story." /></label>
+        <label>Mission Integrity alignment<textarea name="mission_alignment_feedback" required defaultValue={existingReview?.mission_alignment_feedback ?? ""} placeholder="Where does the chapter connect clearly to mission, values, vision, or integrity in leadership practice?" /></label>
+        <label>Strength of the story<textarea name="story_feedback" required defaultValue={existingReview?.story_feedback ?? ""} placeholder="Comment on the lived experience, authenticity, clarity of context, and whether the story feels useful to other leaders." /></label>
+        <label>Practical value for leaders<textarea name="practical_value_feedback" defaultValue={existingReview?.practical_value_feedback ?? ""} placeholder="What practical learning, tools, questions, or implications could be made clearer?" /></label>
+        <label>Use of evidence<textarea name="evidence_feedback" defaultValue={existingReview?.evidence_feedback ?? ""} placeholder="Suggest where research, professional reading, or frameworks could support the chapter without making it too heavy." /></label>
+        <label>Recommendations for improvement<textarea name="recommendations" required defaultValue={existingReview?.recommendations ?? ""} placeholder="Give clear, specific, constructive recommendations the author can act on." /></label>
+        <label>Overall recommendation<select name="overall_recommendation" defaultValue={existingReview?.overall_recommendation ?? "revise_and_resubmit"}><option value="minor_revisions">Minor revisions</option><option value="revise_and_resubmit">Revise and strengthen</option><option value="major_revisions">Major revisions needed</option><option value="ready_for_editorial_review">Ready for editorial review</option></select></label>
+        <PeerReviewSubmitButton hasExistingReview={Boolean(existingReview)} />
+      </form>
+    </article>
+  );
+}
+
+function PeerReviewSubmitButton({ hasExistingReview }: { hasExistingReview: boolean }) {
+  const { pending } = useFormStatus();
+  return <button className="primary" disabled={pending} type="submit">{pending ? "Saving review..." : hasExistingReview ? "Update peer review" : "Submit peer review"}</button>;
 }
 
 function AdminView({
   book,
   books,
   chapters,
-  stats
+  stats,
+  peerReviewSettings,
+  peerReviewAssignments
 }: {
   book: BookRecord;
   books: BookRecord[];
   chapters: ChapterRecord[];
   stats: Array<{ label: string; value: number }>;
+  peerReviewSettings?: PeerReviewSettingsRecord;
+  peerReviewAssignments: PeerReviewAssignmentRecord[];
 }) {
   const approvedChapters = chapters.filter((chapter) => chapter.status === "approved" || !chapter.stage.includes("proposal"));
 
@@ -489,6 +639,7 @@ function AdminView({
         <div className="stat-grid">{stats.map((stat) => <div className="stat" key={stat.label}><strong>{stat.value}</strong><span>{stat.label}</span></div>)}</div>
         <CallSettingsForm book={book.id ? book : undefined} hasBooks={books.length > 0} />
         <ApprovedAuthorsPanel chapters={approvedChapters} />
+        <PeerReviewAdminPanel book={book} chapters={approvedChapters} settings={peerReviewSettings} assignments={peerReviewAssignments} />
         <div className="stage-list">{workflowStages.map((stage) => <div className="stage" key={stage.name}><span>{stage.name}</span><small>{stage.owner}</small></div>)}</div>
       </aside>
       <ReviewWorkspace title="Admin Proposal Board" book={book} chapters={chapters} canDecide />
@@ -537,6 +688,69 @@ function ApprovedAuthorsPanel({ chapters }: { chapters: ChapterRecord[] }) {
           </div>
         </>
       ) : null}
+    </div>
+  );
+}
+
+function PeerReviewAdminPanel({
+  book,
+  chapters,
+  settings,
+  assignments
+}: {
+  book: BookRecord;
+  chapters: ChapterRecord[];
+  settings?: PeerReviewSettingsRecord;
+  assignments: PeerReviewAssignmentRecord[];
+}) {
+  const chapterCoverage = chapters.map((chapter) => {
+    const chapterAssignments = assignments.filter((assignment) => assignment.chapter_id === chapter.id);
+    const completed = chapterAssignments.filter((assignment) => assignment.peer_reviews?.length || assignment.status === "completed").length;
+    return { chapter, assigned: chapterAssignments.length, completed };
+  });
+  const incompleteAssignments = assignments.filter((assignment) => !assignment.peer_reviews?.length && assignment.status !== "completed");
+  const canGenerate = chapters.length >= 3;
+
+  return (
+    <div className="admin-tools peer-admin">
+      <div>
+        <h3>Blind peer review</h3>
+        <p className="muted">Open the stage only when drafts are ready. ChapterFlow assigns two reviewers to each approved chapter and two chapters to each author.</p>
+      </div>
+      <form action={savePeerReviewSettings}>
+        <input type="hidden" name="book_id" value={book.id} />
+        <label>Peer review status<select name="is_open" defaultValue={settings?.is_open ? "open" : "closed"}><option value="closed">Closed to authors</option><option value="open">Open to reviewers</option></select></label>
+        <label>Review deadline<input type="date" name="review_deadline" defaultValue={settings?.review_deadline ?? ""} /></label>
+        <label>Reviewer guidance<textarea name="instructions" defaultValue={settings?.instructions ?? "Please provide constructive, specific feedback on structure, alignment with Mission Integrity, clarity of the story, practical value for other leaders, and light use of evidence."} /></label>
+        <button className="primary" type="submit">Save peer review settings</button>
+      </form>
+      <div className="peer-admin-actions">
+        <form action={generatePeerReviewAssignments}>
+          <input type="hidden" name="book_id" value={book.id} />
+          <button disabled={!canGenerate} type="submit" name="_action" value="save">Generate assignments</button>
+          <button className="primary" disabled={!canGenerate} type="submit" name="_action" value="notify">Generate and email reviewers</button>
+        </form>
+        {!canGenerate ? <p className="muted">At least three approved chapters are needed for blind peer review without self-review.</p> : null}
+        <form action={sendPeerReviewReminders}>
+          <input type="hidden" name="book_id" value={book.id} />
+          <button disabled={!incompleteAssignments.length} type="submit">Send late review reminders</button>
+        </form>
+      </div>
+      <div className="peer-coverage-list">
+        <strong>Review coverage</strong>
+        {chapterCoverage.length ? chapterCoverage.map(({ chapter, assigned, completed }) => (
+          <div className="peer-coverage-row" key={chapter.id}>
+            <span>{chapter.title}</span>
+            <small>{assigned}/2 assigned · {completed}/2 submitted</small>
+          </div>
+        )) : <p className="muted">Approved chapters will appear here when they are ready for peer review.</p>}
+      </div>
+      <div className="email-draft">
+        <strong>Assignment email template</strong>
+        <p>When you choose “Generate and email reviewers”, each reviewer receives their two chapter assignments, the review deadline, your reviewer guidance, and a link back to ChapterFlow.</p>
+        <strong>Late reminder template</strong>
+        <p>The reminder asks reviewers to complete outstanding reviews, names the assigned chapter, repeats the deadline, and invites them to contact the editorial team if there is a problem.</p>
+      </div>
     </div>
   );
 }

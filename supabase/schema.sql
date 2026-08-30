@@ -129,6 +129,47 @@ create table if not exists public.facilitator_books (
   unique (facilitator_id, book_id)
 );
 
+create table if not exists public.peer_review_settings (
+  id uuid primary key default gen_random_uuid(),
+  book_id uuid not null references public.books(id) on delete cascade unique,
+  is_open boolean not null default false,
+  review_deadline date,
+  instructions text,
+  opened_by uuid references public.profiles(id) on delete set null,
+  opened_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.peer_review_assignments (
+  id uuid primary key default gen_random_uuid(),
+  book_id uuid not null references public.books(id) on delete cascade,
+  chapter_id uuid not null references public.chapters(id) on delete cascade,
+  reviewer_id uuid not null references public.profiles(id) on delete cascade,
+  assigned_by uuid references public.profiles(id) on delete set null,
+  status text not null default 'assigned',
+  notified_at timestamptz,
+  reminder_sent_at timestamptz,
+  created_at timestamptz not null default now(),
+  unique (chapter_id, reviewer_id)
+);
+
+create table if not exists public.peer_reviews (
+  id uuid primary key default gen_random_uuid(),
+  assignment_id uuid not null references public.peer_review_assignments(id) on delete cascade unique,
+  chapter_id uuid not null references public.chapters(id) on delete cascade,
+  reviewer_id uuid not null references public.profiles(id) on delete cascade,
+  structure_feedback text,
+  mission_alignment_feedback text,
+  story_feedback text,
+  practical_value_feedback text,
+  evidence_feedback text,
+  recommendations text,
+  overall_recommendation text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create or replace function public.handle_new_user()
 returns trigger
 language plpgsql
@@ -154,6 +195,9 @@ alter table public.submission_files enable row level security;
 alter table public.reviews enable row level security;
 alter table public.email_logs enable row level security;
 alter table public.facilitator_books enable row level security;
+alter table public.peer_review_settings enable row level security;
+alter table public.peer_review_assignments enable row level security;
+alter table public.peer_reviews enable row level security;
 
 create or replace function public.is_admin()
 returns boolean language sql security definer set search_path = public as $$
@@ -172,6 +216,18 @@ $$;
 create or replace function public.is_facilitator()
 returns boolean language sql security definer set search_path = public as $$
   select exists (select 1 from public.profiles where id = auth.uid() and role::text = 'facilitator');
+$$;
+
+create or replace function public.is_peer_reviewer_for(target_chapter_id uuid)
+returns boolean language sql security definer set search_path = public as $$
+  select exists (
+    select 1
+    from public.peer_review_assignments pra
+    join public.peer_review_settings prs on prs.book_id = pra.book_id
+    where pra.chapter_id = target_chapter_id
+      and pra.reviewer_id = auth.uid()
+      and prs.is_open = true
+  );
 $$;
 
 drop policy if exists "Admins can manage all profiles" on public.profiles;
@@ -205,6 +261,8 @@ drop policy if exists "Facilitators can view all chapters" on public.chapters;
 create policy "Facilitators can view all chapters" on public.chapters for select using (public.is_facilitator());
 drop policy if exists "Authors can view their chapters" on public.chapters;
 create policy "Authors can view their chapters" on public.chapters for select using (author_id = auth.uid());
+drop policy if exists "Peer reviewers can view assigned chapters" on public.chapters;
+create policy "Peer reviewers can view assigned chapters" on public.chapters for select using (public.is_peer_reviewer_for(id));
 drop policy if exists "Authors can create chapters" on public.chapters;
 create policy "Authors can create chapters" on public.chapters for insert with check (author_id = auth.uid());
 drop policy if exists "Admins can manage submissions" on public.submissions;
@@ -222,6 +280,10 @@ drop policy if exists "Facilitators can view all submissions" on public.submissi
 create policy "Facilitators can view all submissions" on public.submissions for select using (public.is_facilitator());
 drop policy if exists "Authors can manage their submissions" on public.submissions;
 create policy "Authors can manage their submissions" on public.submissions using (submitted_by = auth.uid()) with check (submitted_by = auth.uid());
+drop policy if exists "Peer reviewers can view assigned submissions" on public.submissions;
+create policy "Peer reviewers can view assigned submissions" on public.submissions for select using (
+  exists (select 1 from public.chapters c where c.id = submissions.chapter_id and public.is_peer_reviewer_for(c.id))
+);
 drop policy if exists "Admins can manage submission files" on public.submission_files;
 create policy "Admins can manage submission files" on public.submission_files using (public.is_admin());
 drop policy if exists "Authors can manage their submission files" on public.submission_files;
@@ -242,6 +304,15 @@ create policy "Facilitators can view assigned submission files" on public.submis
 );
 drop policy if exists "Facilitators can view all submission files" on public.submission_files;
 create policy "Facilitators can view all submission files" on public.submission_files for select using (public.is_facilitator());
+drop policy if exists "Peer reviewers can view assigned submission files" on public.submission_files;
+create policy "Peer reviewers can view assigned submission files" on public.submission_files for select using (
+  exists (
+    select 1
+    from public.submissions s
+    where s.id = submission_files.submission_id
+      and public.is_peer_reviewer_for(s.chapter_id)
+  )
+);
 drop policy if exists "Admins can manage reviews" on public.reviews;
 create policy "Admins can manage reviews" on public.reviews using (public.is_admin());
 drop policy if exists "Facilitators can review assigned chapters" on public.reviews;
@@ -266,3 +337,24 @@ drop policy if exists "Admins can manage facilitator assignments" on public.faci
 create policy "Admins can manage facilitator assignments" on public.facilitator_books using (public.is_admin());
 drop policy if exists "Facilitators can read their assignments" on public.facilitator_books;
 create policy "Facilitators can read their assignments" on public.facilitator_books for select using (facilitator_id = auth.uid());
+
+drop policy if exists "Admins can manage peer review settings" on public.peer_review_settings;
+create policy "Admins can manage peer review settings" on public.peer_review_settings using (public.is_admin()) with check (public.is_admin());
+drop policy if exists "Authors can read open peer review settings" on public.peer_review_settings;
+create policy "Authors can read open peer review settings" on public.peer_review_settings for select using (is_open = true);
+drop policy if exists "Facilitators can read peer review settings" on public.peer_review_settings;
+create policy "Facilitators can read peer review settings" on public.peer_review_settings for select using (public.is_facilitator());
+
+drop policy if exists "Admins can manage peer review assignments" on public.peer_review_assignments;
+create policy "Admins can manage peer review assignments" on public.peer_review_assignments using (public.is_admin()) with check (public.is_admin());
+drop policy if exists "Reviewers can read their peer review assignments" on public.peer_review_assignments;
+create policy "Reviewers can read their peer review assignments" on public.peer_review_assignments for select using (reviewer_id = auth.uid());
+drop policy if exists "Facilitators can read peer review assignments" on public.peer_review_assignments;
+create policy "Facilitators can read peer review assignments" on public.peer_review_assignments for select using (public.is_facilitator());
+
+drop policy if exists "Admins can manage peer reviews" on public.peer_reviews;
+create policy "Admins can manage peer reviews" on public.peer_reviews using (public.is_admin()) with check (public.is_admin());
+drop policy if exists "Reviewers can manage their own peer reviews" on public.peer_reviews;
+create policy "Reviewers can manage their own peer reviews" on public.peer_reviews using (reviewer_id = auth.uid()) with check (reviewer_id = auth.uid());
+drop policy if exists "Facilitators can read peer reviews" on public.peer_reviews;
+create policy "Facilitators can read peer reviews" on public.peer_reviews for select using (public.is_facilitator());

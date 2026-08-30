@@ -344,3 +344,289 @@ export async function reviewProposal(formData: FormData) {
 
   revalidatePath("/");
 }
+
+export async function savePeerReviewSettings(formData: FormData) {
+  const { supabase, user, profile } = await getSignedInProfile();
+
+  if (!["admin", "editor"].includes(String(profile.role))) {
+    throw new Error("Only an administrator can open or edit peer review.");
+  }
+
+  const bookId = textValue(formData, "book_id");
+  const isOpen = textValue(formData, "is_open") === "open";
+  const reviewDeadline = optionalDate(formData, "review_deadline");
+  const instructions = textValue(formData, "instructions");
+
+  if (!bookId) {
+    throw new Error("Choose a book project before editing peer review.");
+  }
+
+  const { error } = await supabase.from("peer_review_settings").upsert(
+    {
+      book_id: bookId,
+      is_open: isOpen,
+      review_deadline: reviewDeadline,
+      instructions,
+      opened_by: isOpen ? user.id : null,
+      opened_at: isOpen ? new Date().toISOString() : null,
+      updated_at: new Date().toISOString()
+    },
+    { onConflict: "book_id" }
+  );
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  revalidatePath("/");
+}
+
+export async function generatePeerReviewAssignments(formData: FormData) {
+  const { supabase, user, profile } = await getSignedInProfile();
+
+  if (!["admin", "editor"].includes(String(profile.role))) {
+    throw new Error("Only an administrator can create peer review assignments.");
+  }
+
+  const bookId = textValue(formData, "book_id");
+  const shouldNotify = textValue(formData, "_action") === "notify";
+
+  if (!bookId) {
+    throw new Error("Choose a book project before creating peer review assignments.");
+  }
+
+  const { data: book } = await supabase
+    .from("books")
+    .select("title")
+    .eq("id", bookId)
+    .single();
+  const { data: settings } = await supabase
+    .from("peer_review_settings")
+    .select("is_open, review_deadline, instructions")
+    .eq("book_id", bookId)
+    .maybeSingle();
+  const { data: chapters, error: chapterError } = await supabase
+    .from("chapters")
+    .select("id, title, author_id, profiles:author_id(full_name, email)")
+    .eq("book_id", bookId)
+    .in("status", ["approved", "submitted", "complete"])
+    .order("created_at", { ascending: true });
+
+  if (chapterError) {
+    throw new Error(chapterError.message);
+  }
+
+  const eligibleChapters = (chapters ?? []).filter((chapter) => chapter.author_id);
+
+  if (eligibleChapters.length < 3) {
+    throw new Error("At least three approved chapters are needed so each author can review two chapters without reviewing their own.");
+  }
+
+  await supabase.from("peer_review_assignments").delete().eq("book_id", bookId);
+
+  const assignments = eligibleChapters.flatMap((chapter, index) => {
+    const firstReviewer = eligibleChapters[(index + 1) % eligibleChapters.length];
+    const secondReviewer = eligibleChapters[(index + 2) % eligibleChapters.length];
+    return [firstReviewer, secondReviewer].map((reviewerChapter) => ({
+      book_id: bookId,
+      chapter_id: chapter.id,
+      reviewer_id: reviewerChapter.author_id,
+      assigned_by: user.id,
+      status: "assigned",
+      notified_at: shouldNotify ? new Date().toISOString() : null
+    }));
+  });
+
+  const { error: assignmentError } = await supabase.from("peer_review_assignments").insert(assignments);
+
+  if (assignmentError) {
+    throw new Error(assignmentError.message);
+  }
+
+  if (shouldNotify) {
+    const siteUrl = getSiteUrl();
+    const assignmentsByReviewer = new Map<string, { email: string; name: string; chapters: string[] }>();
+
+    eligibleChapters.forEach((chapter, index) => {
+      const reviewerChapters = [eligibleChapters[(index + 1) % eligibleChapters.length], eligibleChapters[(index + 2) % eligibleChapters.length]];
+      reviewerChapters.forEach((reviewerChapter) => {
+        const reviewerProfile = Array.isArray(reviewerChapter.profiles) ? reviewerChapter.profiles[0] : reviewerChapter.profiles;
+        if (!reviewerProfile?.email) return;
+        const current = assignmentsByReviewer.get(reviewerChapter.author_id) ?? {
+          email: reviewerProfile.email,
+          name: reviewerProfile.full_name || "there",
+          chapters: [] as string[]
+        };
+        current.chapters.push(chapter.title);
+        assignmentsByReviewer.set(reviewerChapter.author_id, current);
+      });
+    });
+
+    for (const reviewer of assignmentsByReviewer.values()) {
+      const subject = "Your blind peer review assignments are ready";
+      const chapterList = reviewer.chapters.map((title, index) => `${index + 1}. ${title}`).join("\n");
+      const body = [
+        `Hello ${reviewer.name},`,
+        "",
+        `The blind peer review stage for ${book?.title ?? "the edited book project"} is now open.`,
+        "",
+        "You have been assigned two chapters to review:",
+        chapterList,
+        "",
+        `Please complete your reviews by ${formatDate(settings?.review_deadline)}.`,
+        "",
+        "The review process is guided in ChapterFlow. You will be asked to comment on structure, alignment with Mission Integrity, clarity of the story, practical value for school leaders, use of evidence, and recommended improvements.",
+        "",
+        settings?.instructions ? `Additional guidance:\n${settings.instructions}\n` : "",
+        `Sign in to ChapterFlow here: ${siteUrl}`,
+        "",
+        "Best wishes,",
+        "The ChapterFlow editorial team"
+      ].filter(Boolean).join("\n");
+      const html = `
+        <p>Hello ${escapeHtml(reviewer.name)},</p>
+        <p>The blind peer review stage for <strong>${escapeHtml(book?.title ?? "the edited book project")}</strong> is now open.</p>
+        <p>You have been assigned two chapters to review:</p>
+        <ol>${reviewer.chapters.map((title) => `<li>${escapeHtml(title)}</li>`).join("")}</ol>
+        <p>Please complete your reviews by <strong>${formatDate(settings?.review_deadline)}</strong>.</p>
+        <p>The review process is guided in ChapterFlow. You will be asked to comment on structure, alignment with Mission Integrity, clarity of the story, practical value for school leaders, use of evidence, and recommended improvements.</p>
+        ${settings?.instructions ? `<p><strong>Additional guidance:</strong><br />${escapeHtml(settings.instructions)}</p>` : ""}
+        <p><a href="${siteUrl}">Sign in to ChapterFlow</a></p>
+        <p>Best wishes,<br />The ChapterFlow editorial team</p>
+      `;
+
+      await sendResendEmail({ to: reviewer.email, subject, text: body, html });
+    }
+  }
+
+  revalidatePath("/");
+}
+
+export async function submitPeerReview(formData: FormData) {
+  const { supabase, user } = await getSignedInProfile();
+
+  const assignmentId = textValue(formData, "assignment_id");
+  const chapterId = textValue(formData, "chapter_id");
+  const structureFeedback = textValue(formData, "structure_feedback");
+  const missionAlignmentFeedback = textValue(formData, "mission_alignment_feedback");
+  const storyFeedback = textValue(formData, "story_feedback");
+  const practicalValueFeedback = textValue(formData, "practical_value_feedback");
+  const evidenceFeedback = textValue(formData, "evidence_feedback");
+  const recommendations = textValue(formData, "recommendations");
+  const overallRecommendation = textValue(formData, "overall_recommendation");
+
+  if (!assignmentId || !chapterId || !structureFeedback || !missionAlignmentFeedback || !storyFeedback || !recommendations) {
+    throw new Error("Please complete the required peer review fields before submitting.");
+  }
+
+  const { data: assignment, error: assignmentError } = await supabase
+    .from("peer_review_assignments")
+    .select("id, reviewer_id")
+    .eq("id", assignmentId)
+    .eq("reviewer_id", user.id)
+    .single();
+
+  if (assignmentError || !assignment) {
+    throw new Error("This peer review assignment could not be found for your account.");
+  }
+
+  const { error: reviewError } = await supabase.from("peer_reviews").upsert(
+    {
+      assignment_id: assignmentId,
+      chapter_id: chapterId,
+      reviewer_id: user.id,
+      structure_feedback: structureFeedback,
+      mission_alignment_feedback: missionAlignmentFeedback,
+      story_feedback: storyFeedback,
+      practical_value_feedback: practicalValueFeedback,
+      evidence_feedback: evidenceFeedback,
+      recommendations,
+      overall_recommendation: overallRecommendation,
+      updated_at: new Date().toISOString()
+    },
+    { onConflict: "assignment_id" }
+  );
+
+  if (reviewError) {
+    throw new Error(reviewError.message);
+  }
+
+  await supabase.from("peer_review_assignments").update({ status: "completed" }).eq("id", assignmentId);
+
+  revalidatePath("/");
+}
+
+export async function sendPeerReviewReminders(formData: FormData) {
+  const { supabase, user, profile } = await getSignedInProfile();
+
+  if (!["admin", "editor"].includes(String(profile.role))) {
+    throw new Error("Only an administrator can send peer review reminders.");
+  }
+
+  const bookId = textValue(formData, "book_id");
+
+  if (!bookId) {
+    throw new Error("Choose a book project before sending reminders.");
+  }
+
+  const { data: settings } = await supabase
+    .from("peer_review_settings")
+    .select("review_deadline")
+    .eq("book_id", bookId)
+    .maybeSingle();
+  const { data: book } = await supabase.from("books").select("title").eq("id", bookId).single();
+  const { data: assignments, error } = await supabase
+    .from("peer_review_assignments")
+    .select("id, reviewer_id, profiles:reviewer_id(full_name, email), chapters:chapter_id(title)")
+    .eq("book_id", bookId)
+    .neq("status", "completed");
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const siteUrl = getSiteUrl();
+
+  for (const assignment of assignments ?? []) {
+    const reviewer = Array.isArray(assignment.profiles) ? assignment.profiles[0] : assignment.profiles;
+    const chapter = Array.isArray(assignment.chapters) ? assignment.chapters[0] : assignment.chapters;
+    if (!reviewer?.email) continue;
+
+    const subject = "Reminder: your ChapterFlow peer review is due";
+    const body = [
+      `Hello ${reviewer.full_name || "there"},`,
+      "",
+      `This is a gentle reminder that your peer review for ${book?.title ?? "the edited book project"} is still outstanding.`,
+      "",
+      `Assigned chapter: ${chapter?.title ?? "Assigned chapter"}`,
+      `Review deadline: ${formatDate(settings?.review_deadline)}`,
+      "",
+      "Please sign in to ChapterFlow and complete the guided review as soon as you can. Your feedback will help the author strengthen the structure, clarity, practical value, and alignment of their chapter.",
+      "",
+      "If there is a problem with completing the review, please email the editorial team so we can support the process.",
+      "",
+      `ChapterFlow: ${siteUrl}`,
+      "",
+      "Best wishes,",
+      "The ChapterFlow editorial team"
+    ].join("\n");
+    const html = `
+      <p>Hello ${escapeHtml(reviewer.full_name || "there")},</p>
+      <p>This is a gentle reminder that your peer review for <strong>${escapeHtml(book?.title ?? "the edited book project")}</strong> is still outstanding.</p>
+      <p><strong>Assigned chapter:</strong> ${escapeHtml(chapter?.title ?? "Assigned chapter")}<br />
+      <strong>Review deadline:</strong> ${formatDate(settings?.review_deadline)}</p>
+      <p>Please sign in to ChapterFlow and complete the guided review as soon as you can. Your feedback will help the author strengthen the structure, clarity, practical value, and alignment of their chapter.</p>
+      <p>If there is a problem with completing the review, please email the editorial team so we can support the process.</p>
+      <p><a href="${siteUrl}">Sign in to ChapterFlow</a></p>
+      <p>Best wishes,<br />The ChapterFlow editorial team</p>
+    `;
+
+    await sendResendEmail({ to: reviewer.email, subject, text: body, html });
+    await supabase
+      .from("peer_review_assignments")
+      .update({ reminder_sent_at: new Date().toISOString() })
+      .eq("id", assignment.id);
+  }
+
+  revalidatePath("/");
+}
