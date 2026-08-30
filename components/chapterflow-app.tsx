@@ -627,22 +627,40 @@ function AdminView({
   peerReviewAssignments: PeerReviewAssignmentRecord[];
 }) {
   const approvedChapters = chapters.filter((chapter) => chapter.status === "approved" || !chapter.stage.includes("proposal"));
+  const [adminTab, setAdminTab] = useState<"call" | "authors" | "proposals" | "peer-review" | "workflow">("proposals");
+  const adminTabs = [
+    { id: "proposals", label: "Proposals" },
+    { id: "peer-review", label: "Peer review" },
+    { id: "authors", label: "Authors & email" },
+    { id: "call", label: "Call settings" },
+    { id: "workflow", label: "Workflow" }
+  ] as const;
 
   return (
-    <section className="workspace">
-      <aside className="panel sidebar">
+    <section className="admin-page">
+      <div className="panel admin-hero">
         <div className="section-heading">
           <p className="eyebrow">Admin Control Centre</p>
-          <h2>Design the call</h2>
-          <p className="muted">Edit what authors see, set the workflow deadlines, and open or close the call.</p>
+          <h2>{book.title}</h2>
+          <p className="muted">Use the tabs to work in one focused admin space at a time: proposals, peer review, author emails, public call settings, and workflow tracking.</p>
         </div>
-        <div className="stat-grid">{stats.map((stat) => <div className="stat" key={stat.label}><strong>{stat.value}</strong><span>{stat.label}</span></div>)}</div>
-        <CallSettingsForm book={book.id ? book : undefined} hasBooks={books.length > 0} />
-        <ApprovedAuthorsPanel chapters={approvedChapters} />
-        <PeerReviewAdminPanel book={book} chapters={approvedChapters} settings={peerReviewSettings} assignments={peerReviewAssignments} />
-        <div className="stage-list">{workflowStages.map((stage) => <div className="stage" key={stage.name}><span>{stage.name}</span><small>{stage.owner}</small></div>)}</div>
-      </aside>
-      <ReviewWorkspace title="Admin Proposal Board" book={book} chapters={chapters} canDecide />
+        <div className="stat-grid admin-metrics">{stats.map((stat) => <div className="stat" key={stat.label}><strong>{stat.value}</strong><span>{stat.label}</span></div>)}</div>
+        <div className="admin-tabs" aria-label="Admin sections">
+          {adminTabs.map((tab) => (
+            <button key={tab.id} className={adminTab === tab.id ? "active" : ""} onClick={() => setAdminTab(tab.id)} type="button">
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="admin-tab-panel">
+        {adminTab === "proposals" ? <ReviewWorkspace title="Admin Proposal Board" book={book} chapters={chapters} canDecide /> : null}
+        {adminTab === "peer-review" ? <PeerReviewAdminPanel book={book} chapters={approvedChapters} settings={peerReviewSettings} assignments={peerReviewAssignments} /> : null}
+        {adminTab === "authors" ? <ApprovedAuthorsPanel chapters={approvedChapters} /> : null}
+        {adminTab === "call" ? <CallSettingsForm book={book.id ? book : undefined} hasBooks={books.length > 0} /> : null}
+        {adminTab === "workflow" ? <WorkflowPanel book={book} stats={stats} /> : null}
+      </div>
     </section>
   );
 }
@@ -755,6 +773,30 @@ function PeerReviewAdminPanel({
   );
 }
 
+function WorkflowPanel({ book, stats }: { book: BookRecord; stats: Array<{ label: string; value: number }> }) {
+  return (
+    <section className="panel workflow-panel">
+      <div className="section-heading">
+        <p className="eyebrow">Workflow overview</p>
+        <h2>Project stages and deadlines</h2>
+        <p className="muted">Use this page as the simple map of where the book process is heading.</p>
+      </div>
+      <div className="stat-grid admin-metrics">{stats.map((stat) => <div className="stat" key={stat.label}><strong>{stat.value}</strong><span>{stat.label}</span></div>)}</div>
+      <div className="admin-two-column">
+        <div className="admin-tools">
+          <h3>Deadline sequence</h3>
+          <DeadlineStrip book={book} />
+          <div className="timeline"><DeadlineList book={book} /></div>
+        </div>
+        <div className="admin-tools">
+          <h3>Editorial stages</h3>
+          <div className="stage-list">{workflowStages.map((stage) => <div className="stage" key={stage.name}><span>{stage.name}</span><small>{stage.owner}</small></div>)}</div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function FacilitatorView({
   book,
   chapters,
@@ -828,7 +870,7 @@ function ReviewWorkspace({
   const selected = chapters.find((chapter) => chapter.id === selectedId) ?? chapters[0];
 
   return (
-    <>
+    <section className="proposal-review-page">
       <section className="panel table-panel">
         <div className="section-heading"><p className="eyebrow">Submissions</p><h2>{title}</h2></div>
         <div className="chapter-table">
@@ -844,7 +886,7 @@ function ReviewWorkspace({
           )) : <div className="empty-table"><strong>No proposals yet</strong><span>Submitted proposals will appear here as soon as authors send them through ChapterFlow.</span></div>}
         </div>
       </section>
-      <aside className="panel detail-panel">
+      <section className="panel detail-panel review-detail-full">
         {selected ? (
           <>
             <div className="section-heading"><p className="eyebrow">Proposal review</p><h2>{selected.title}</h2></div>
@@ -856,8 +898,8 @@ function ReviewWorkspace({
         ) : (
           <EmptyState title="No proposal selected" message="Once authors submit proposals, you will be able to review them here." />
         )}
-      </aside>
-    </>
+      </section>
+    </section>
   );
 }
 
