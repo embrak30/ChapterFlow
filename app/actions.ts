@@ -102,6 +102,116 @@ function optionalDate(formData: FormData, key: string) {
   return value || null;
 }
 
+function getDraftFile(formData: FormData) {
+  const file = formData.get("manuscript");
+
+  if (!(file instanceof File) || file.size === 0) {
+    throw new Error("Please choose a Word document before uploading your draft.");
+  }
+
+  const allowedTypes = [
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/msword"
+  ];
+  const fileName = file.name || "chapter-draft.docx";
+  const lowerFileName = fileName.toLowerCase();
+
+  if (!lowerFileName.endsWith(".docx") && !lowerFileName.endsWith(".doc")) {
+    throw new Error("Please upload your manuscript as a Microsoft Word file (.docx or .doc).");
+  }
+
+  if (file.type && !allowedTypes.includes(file.type)) {
+    throw new Error("Please upload your manuscript as a Microsoft Word file (.docx or .doc).");
+  }
+
+  if (file.size > 20 * 1024 * 1024) {
+    throw new Error("Please upload a file smaller than 20MB.");
+  }
+
+  return { file, fileName };
+}
+
+async function saveDraftUpload({
+  supabase,
+  bookId,
+  chapterId,
+  authorId,
+  chapterTitle,
+  responseToFeedback,
+  file,
+  fileName
+}: {
+  supabase: Awaited<ReturnType<typeof createClient>>;
+  bookId: string;
+  chapterId: string;
+  authorId: string;
+  chapterTitle: string;
+  responseToFeedback: string;
+  file: File;
+  fileName: string;
+}) {
+  const { data: book } = await supabase
+    .from("books")
+    .select("second_draft_deadline")
+    .eq("id", bookId)
+    .maybeSingle();
+
+  const { data: submission, error: submissionError } = await supabase
+    .from("submissions")
+    .insert({
+      chapter_id: chapterId,
+      submitted_by: authorId,
+      stage: "first_draft",
+      title: chapterTitle,
+      response_to_feedback: responseToFeedback
+    })
+    .select("id")
+    .single();
+
+  if (submissionError || !submission) {
+    throw new Error(submissionError?.message ?? "The draft submission could not be created.");
+  }
+
+  const safeFileName = fileName.replace(/[^a-zA-Z0-9._-]/g, "-");
+  const storagePath = `${bookId}/${chapterId}/${authorId}/${Date.now()}-${safeFileName}`;
+  const { error: uploadError } = await supabase.storage
+    .from("chapter-drafts")
+    .upload(storagePath, file, {
+      contentType: file.type || "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      upsert: false
+    });
+
+  if (uploadError) {
+    throw new Error(uploadError.message);
+  }
+
+  const { error: fileError } = await supabase.from("submission_files").insert({
+    submission_id: submission.id,
+    storage_path: storagePath,
+    file_name: fileName,
+    content_type: file.type || null,
+    byte_size: file.size
+  });
+
+  if (fileError) {
+    throw new Error(fileError.message);
+  }
+
+  const { error: updateError } = await supabase
+    .from("chapters")
+    .update({
+      stage: "first_draft",
+      status: "submitted",
+      current_deadline: book?.second_draft_deadline ?? null,
+      updated_at: new Date().toISOString()
+    })
+    .eq("id", chapterId);
+
+  if (updateError) {
+    throw new Error(updateError.message);
+  }
+}
+
 export async function saveCallSettings(formData: FormData) {
   const { supabase, user, profile } = await getSignedInProfile();
 
@@ -194,6 +304,85 @@ export async function submitProposal(formData: FormData) {
   if (submissionError) {
     throw new Error(submissionError.message);
   }
+
+  revalidatePath("/");
+}
+
+export async function uploadDraftManuscript(formData: FormData) {
+  const { supabase, user } = await getSignedInProfile();
+
+  const bookId = textValue(formData, "book_id");
+  const chapterId = textValue(formData, "chapter_id");
+  const responseToFeedback = textValue(formData, "response_to_feedback");
+  const { file, fileName } = getDraftFile(formData);
+
+  if (!bookId || !chapterId) {
+    throw new Error("ChapterFlow could not identify the chapter for this draft.");
+  }
+
+  const { data: chapter, error: chapterError } = await supabase
+    .from("chapters")
+    .select("id, title, author_id")
+    .eq("id", chapterId)
+    .eq("book_id", bookId)
+    .eq("author_id", user.id)
+    .single();
+
+  if (chapterError || !chapter) {
+    throw new Error("This chapter could not be found for your account.");
+  }
+
+  await saveDraftUpload({
+    supabase,
+    bookId,
+    chapterId,
+    authorId: user.id,
+    chapterTitle: chapter.title,
+    responseToFeedback,
+    file,
+    fileName
+  });
+
+  revalidatePath("/");
+}
+
+export async function adminUploadDraftManuscript(formData: FormData) {
+  const { supabase, profile } = await getSignedInProfile();
+
+  if (!["admin", "editor"].includes(String(profile.role))) {
+    throw new Error("Only an administrator can upload a draft for an author.");
+  }
+
+  const bookId = textValue(formData, "book_id");
+  const chapterId = textValue(formData, "chapter_id");
+  const responseToFeedback = textValue(formData, "response_to_feedback");
+  const { file, fileName } = getDraftFile(formData);
+
+  if (!bookId || !chapterId) {
+    throw new Error("ChapterFlow could not identify the chapter for this draft.");
+  }
+
+  const { data: chapter, error: chapterError } = await supabase
+    .from("chapters")
+    .select("id, title, author_id")
+    .eq("id", chapterId)
+    .eq("book_id", bookId)
+    .single();
+
+  if (chapterError || !chapter) {
+    throw new Error("This chapter could not be found.");
+  }
+
+  await saveDraftUpload({
+    supabase,
+    bookId,
+    chapterId,
+    authorId: chapter.author_id,
+    chapterTitle: chapter.title,
+    responseToFeedback,
+    file,
+    fileName
+  });
 
   revalidatePath("/");
 }

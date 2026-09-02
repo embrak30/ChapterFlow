@@ -98,6 +98,22 @@ create table if not exists public.submission_files (
   created_at timestamptz not null default now()
 );
 
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'chapter-drafts',
+  'chapter-drafts',
+  false,
+  20971520,
+  array[
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+  ]
+)
+on conflict (id) do update set
+  public = excluded.public,
+  file_size_limit = excluded.file_size_limit,
+  allowed_mime_types = excluded.allowed_mime_types;
+
 create table if not exists public.reviews (
   id uuid primary key default gen_random_uuid(),
   chapter_id uuid not null references public.chapters(id) on delete cascade,
@@ -265,6 +281,8 @@ drop policy if exists "Peer reviewers can view assigned chapters" on public.chap
 create policy "Peer reviewers can view assigned chapters" on public.chapters for select using (public.is_peer_reviewer_for(id));
 drop policy if exists "Authors can create chapters" on public.chapters;
 create policy "Authors can create chapters" on public.chapters for insert with check (author_id = auth.uid());
+drop policy if exists "Authors can update their chapters" on public.chapters;
+create policy "Authors can update their chapters" on public.chapters for update using (author_id = auth.uid()) with check (author_id = auth.uid());
 drop policy if exists "Admins can manage submissions" on public.submissions;
 create policy "Admins can manage submissions" on public.submissions using (public.is_admin());
 drop policy if exists "Facilitators can view assigned submissions" on public.submissions;
@@ -337,6 +355,47 @@ drop policy if exists "Admins can manage facilitator assignments" on public.faci
 create policy "Admins can manage facilitator assignments" on public.facilitator_books using (public.is_admin());
 drop policy if exists "Facilitators can read their assignments" on public.facilitator_books;
 create policy "Facilitators can read their assignments" on public.facilitator_books for select using (facilitator_id = auth.uid());
+
+drop policy if exists "Authors can upload their chapter drafts" on storage.objects;
+create policy "Authors can upload their chapter drafts" on storage.objects for insert with check (
+  bucket_id = 'chapter-drafts'
+  and exists (
+    select 1
+    from public.chapters c
+    where c.book_id::text = (storage.foldername(name))[1]
+      and c.id::text = (storage.foldername(name))[2]
+      and c.author_id = auth.uid()
+  )
+);
+
+drop policy if exists "Admins can upload chapter drafts" on storage.objects;
+create policy "Admins can upload chapter drafts" on storage.objects for insert with check (
+  bucket_id = 'chapter-drafts'
+  and public.is_admin()
+);
+
+drop policy if exists "Users can read permitted chapter draft files" on storage.objects;
+create policy "Users can read permitted chapter draft files" on storage.objects for select using (
+  bucket_id = 'chapter-drafts'
+  and (
+    public.is_admin()
+    or public.is_facilitator()
+    or exists (
+      select 1
+      from public.chapters c
+      where c.book_id::text = (storage.foldername(name))[1]
+        and c.id::text = (storage.foldername(name))[2]
+        and c.author_id = auth.uid()
+    )
+    or exists (
+      select 1
+      from public.chapters c
+      where c.book_id::text = (storage.foldername(name))[1]
+        and c.id::text = (storage.foldername(name))[2]
+        and public.is_peer_reviewer_for(c.id)
+    )
+  )
+);
 
 drop policy if exists "Admins can manage peer review settings" on public.peer_review_settings;
 create policy "Admins can manage peer review settings" on public.peer_review_settings using (public.is_admin()) with check (public.is_admin());

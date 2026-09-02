@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useFormStatus } from "react-dom";
-import { generatePeerReviewAssignments, reviewProposal, saveCallSettings, savePeerReviewSettings, sendPeerReviewReminders, submitPeerReview, submitProposal } from "@/app/actions";
+import { adminUploadDraftManuscript, generatePeerReviewAssignments, reviewProposal, saveCallSettings, savePeerReviewSettings, sendPeerReviewReminders, submitPeerReview, submitProposal, uploadDraftManuscript } from "@/app/actions";
 import { AuthButtons } from "@/components/auth-buttons";
 import { workflowStages } from "@/lib/sample-data";
 
@@ -187,6 +187,11 @@ function latestDraftSubmission(chapter?: ChapterRecord | null) {
   return [...(chapter?.submissions ?? [])]
     .filter((submission) => submission.stage.includes("draft"))
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
+}
+
+function fileHref(file: SubmissionFileRecord) {
+  if (file.storage_path.startsWith("http://") || file.storage_path.startsWith("https://")) return file.storage_path;
+  return `/api/submission-files/${file.id}`;
 }
 
 export function ChapterFlowApp({ userEmail, userName, userRole, books, chapters, peerReviewSettings, peerReviewAssignments }: ChapterFlowAppProps) {
@@ -464,16 +469,21 @@ function AuthorView({
         </section>
         <section className="panel draft-panel">
           <div className="section-heading"><p className="eyebrow">Next stage</p><h2>First draft manuscript</h2></div>
-          <div className="empty-state">
-            <h2>{hasDraftFile ? "Draft received" : proposalApproved ? "Ready for draft upload" : "Locked until proposal approval"}</h2>
-            <p className="muted">
-              {hasDraftFile
-                ? "Your submitted draft file is listed below in your submitted work."
-                : proposalApproved
-                  ? "Draft upload is not yet active on ChapterFlow. If you have already sent a draft to the editor, it may not appear here until file upload is connected."
-                  : "Authors will upload a Word document here once the proposal has been approved and the first draft deadline is active."}
-            </p>
-          </div>
+          {proposalApproved ? (
+            <form action={uploadDraftManuscript} className="draft-upload-form">
+              <input type="hidden" name="book_id" value={book.id} />
+              <input type="hidden" name="chapter_id" value={chapter?.id ?? ""} />
+              <p className="muted">{hasDraftFile ? "You can upload a newer version if the editor has asked for an updated first draft." : "Upload your first draft manuscript as a Microsoft Word document."}</p>
+              <label>Word manuscript<input name="manuscript" type="file" accept=".doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" required /></label>
+              <label>Notes or response to feedback<textarea name="response_to_feedback" placeholder="Optional: tell the editor what you have changed, or add any context for this draft." /></label>
+              <DraftUploadButton hasDraftFile={hasDraftFile} />
+            </form>
+          ) : (
+            <div className="empty-state">
+              <h2>Locked until proposal approval</h2>
+              <p className="muted">You will be able to upload your Word manuscript here once your proposal has been approved.</p>
+            </div>
+          )}
         </section>
         <section className="panel submissions-panel">
           <div className="section-heading">
@@ -498,11 +508,10 @@ function AuthorView({
                   {(submission.submission_files ?? []).length ? (
                     <div className="file-list">
                       {(submission.submission_files ?? []).map((file) => {
-                        const canOpenFile = file.storage_path.startsWith("http://") || file.storage_path.startsWith("https://");
                         return (
                           <div className="file-row" key={file.id}>
                             <span>{file.file_name}</span>
-                            {canOpenFile ? <a className="button-link" href={file.storage_path} target="_blank" rel="noreferrer">View file</a> : <span className="muted">File stored securely</span>}
+                            <a className="button-link" href={fileHref(file)} target="_blank" rel="noreferrer">View file</a>
                           </div>
                         );
                       })}
@@ -557,6 +566,11 @@ function PeerReviewAuthorPanel({
   );
 }
 
+function DraftUploadButton({ hasDraftFile }: { hasDraftFile: boolean }) {
+  const { pending } = useFormStatus();
+  return <button className="primary" disabled={pending} type="submit">{pending ? "Uploading draft..." : hasDraftFile ? "Upload updated draft" : "Upload first draft"}</button>;
+}
+
 function PeerReviewAssignmentCard({ assignment, index }: { assignment: PeerReviewAssignmentRecord; index: number }) {
   const chapter = singleRecord(assignment.chapter);
   const existingReview = assignment.peer_reviews?.[0];
@@ -577,11 +591,10 @@ function PeerReviewAssignmentCard({ assignment, index }: { assignment: PeerRevie
         {draftFiles.length ? (
           <div className="file-list">
             {draftFiles.map((file) => {
-              const canOpenFile = file.storage_path.startsWith("http://") || file.storage_path.startsWith("https://");
               return (
                 <div className="file-row" key={file.id}>
                   <span>{file.file_name}</span>
-                  {canOpenFile ? <a className="button-link" href={file.storage_path} target="_blank" rel="noreferrer">View draft</a> : <span className="muted">File stored securely</span>}
+                  <a className="button-link" href={fileHref(file)} target="_blank" rel="noreferrer">View draft</a>
                 </div>
               );
             })}
@@ -892,6 +905,8 @@ function ReviewWorkspace({
             <div className="section-heading"><p className="eyebrow">Proposal review</p><h2>{selected.title}</h2></div>
             <div className="meta-list"><p><strong>Author</strong>{selected.profiles?.full_name || selected.profiles?.email || "Author"}</p><p><strong>Current stage</strong>{displayStatus(selected.stage)}</p><p><strong>Deadline</strong>{formatDate(selected.current_deadline)}</p></div>
             <div className="document-preview"><span>Story proposal</span><p>{selected.proposal_outline || selected.abstract || "No proposal text supplied."}</p></div>
+            {canDecide ? <AdminDraftUploadForm book={book} chapter={selected} /> : null}
+            <ChapterDraftFiles chapter={selected} />
             <ReviewHistory reviews={selected.reviews ?? []} />
             {canDecide ? <ReviewForm book={book} chapter={selected} /> : null}
           </>
@@ -900,6 +915,48 @@ function ReviewWorkspace({
         )}
       </section>
     </section>
+  );
+}
+
+function AdminDraftUploadForm({ book, chapter }: { book: BookRecord; chapter: ChapterRecord }) {
+  return (
+    <form action={adminUploadDraftManuscript} className="admin-tools draft-upload-form">
+      <h3>Upload draft for this author</h3>
+      <p className="muted">Use this if the author sends you their Word file by email or cannot upload it themselves. The draft will appear on their author profile.</p>
+      <input type="hidden" name="book_id" value={book.id} />
+      <input type="hidden" name="chapter_id" value={chapter.id} />
+      <label>Word manuscript<input name="manuscript" type="file" accept=".doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" required /></label>
+      <label>Admin note<textarea name="response_to_feedback" placeholder="Optional: add a note such as 'Uploaded by admin on behalf of author after email submission.'" /></label>
+      <DraftUploadButton hasDraftFile={Boolean(latestDraftSubmission(chapter)?.submission_files?.length)} />
+    </form>
+  );
+}
+
+function ChapterDraftFiles({ chapter }: { chapter: ChapterRecord }) {
+  const draftSubmissions = [...(chapter.submissions ?? [])]
+    .filter((submission) => submission.stage.includes("draft") || (submission.submission_files ?? []).length)
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+  return (
+    <div className="review-history">
+      <strong>Draft manuscript files</strong>
+      {draftSubmissions.length ? draftSubmissions.map((submission) => (
+        <div className="review-note" key={submission.id}>
+          <small>{displayStatus(submission.stage)} · {formatDate(submission.created_at)}</small>
+          {submission.response_to_feedback ? <p>{submission.response_to_feedback}</p> : null}
+          {(submission.submission_files ?? []).length ? (
+            <div className="file-list">
+              {(submission.submission_files ?? []).map((file) => (
+                <div className="file-row" key={file.id}>
+                  <span>{file.file_name}</span>
+                  <a className="button-link" href={fileHref(file)} target="_blank" rel="noreferrer">Open draft</a>
+                </div>
+              ))}
+            </div>
+          ) : <p className="muted">No file attached to this draft record.</p>}
+        </div>
+      )) : <p className="muted">No draft manuscript has been uploaded yet.</p>}
+    </div>
   );
 }
 
