@@ -153,6 +153,13 @@ const reviewEmailTemplates = [
     subject: "Invitation: ChapterFlow authors meeting on October 11",
     body:
       "Thank you for submitting your chapter proposal, \"{{chapter_title}}\". We are grateful for the thought you have already put into the project and encourage you to continue developing your ideas and writing process.\n\nWe would like to invite you to an authors meeting on October 11 at 8:00 a.m. UK time. The meeting will last approximately 45 minutes.\n\nWe will use this meeting to:\n- See where authors are in the writing process.\n- Finalise expectations for the draft chapter.\n- Support authors who are still shaping or developing their ideas.\n- Give a brief overview of the next stage of the process.\n- Introduce you to the editorial team.\n\nThe purpose of the meeting is to bring our authors together, help everyone stay on track, and make sure we are aligned as the chapters move forward.\n\nPlease look out for the meeting link. If you have any issues, questions, or concerns before then, you are very welcome to email the editorial team."
+  },
+  {
+    id: "first-draft-received",
+    label: "First draft received - next steps after October 30",
+    subject: "Thank you for submitting your first draft",
+    body:
+      "Thank you for submitting the first draft of your chapter, \"{{chapter_title}}\".\n\nWe appreciate the time, thought, and care that has gone into developing your chapter so far. Reaching the first draft stage is an important milestone in the process, and we are grateful for your continued commitment to the project.\n\nAt this stage, please continue to keep your own copy of the draft and any notes you may want to return to later. After October 30, we will begin the next stage of the editorial process and will share more detailed information about what happens next, including review, feedback, and any revisions that may be needed.\n\nFor now, thank you again for getting your draft submitted. If you have any immediate questions or concerns, please feel free to contact the editorial team."
   }
 ];
 
