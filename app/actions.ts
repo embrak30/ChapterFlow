@@ -32,6 +32,13 @@ function escapeHtml(value: string) {
     .replaceAll("\n", "<br />");
 }
 
+function applyEmailPlaceholders(value: string, placeholders: Record<string, string>) {
+  return Object.entries(placeholders).reduce(
+    (current, [key, replacement]) => current.replaceAll(`{{${key}}}`, replacement),
+    value
+  );
+}
+
 async function sendResendEmail({
   to,
   subject,
@@ -466,7 +473,14 @@ export async function reviewProposal(formData: FormData) {
 
     const authorName = author?.full_name || "there";
     const decisionLabel = displayDecision(decision);
-    const subject = emailSubject || `Update on your ChapterFlow proposal: ${chapter.title}`;
+    const placeholders = {
+      author_name: authorName,
+      book_title: book?.title ?? "the edited book project",
+      chapter_title: chapter.title,
+      next_deadline: formatDate(nextDeadline)
+    };
+    const message = applyEmailPlaceholders(combinedFeedback || feedback || "No additional feedback was added.", placeholders);
+    const subject = applyEmailPlaceholders(emailSubject || `Update on your ChapterFlow proposal: ${chapter.title}`, placeholders);
     const chapterFlowUrl = getSiteUrl();
     const body = [
       `Hello ${authorName},`,
@@ -479,7 +493,7 @@ export async function reviewProposal(formData: FormData) {
       "",
       emailTemplateName ? `Email template: ${emailTemplateName}` : "",
       "Message:",
-      combinedFeedback || feedback || "No additional feedback was added.",
+      message,
       "",
       `You can sign in to ChapterFlow here: ${chapterFlowUrl}`,
       "",
@@ -495,7 +509,7 @@ export async function reviewProposal(formData: FormData) {
       <strong>Next deadline:</strong> ${formatDate(nextDeadline)}</p>
       ${emailTemplateName ? `<p><strong>Email template:</strong> ${escapeHtml(emailTemplateName)}</p>` : ""}
       <p><strong>Message:</strong></p>
-      <p>${escapeHtml(combinedFeedback || feedback || "No additional feedback was added.")}</p>
+      <p>${escapeHtml(message)}</p>
       <p><a href="${chapterFlowUrl}">Sign in to ChapterFlow</a></p>
       <p>Best wishes,<br />The ChapterFlow editorial team</p>
     `;
