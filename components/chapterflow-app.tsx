@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useFormStatus } from "react-dom";
-import { adminUploadDraftManuscript, generatePeerReviewAssignments, reviewProposal, saveCallSettings, savePeerReviewSettings, sendPeerReviewReminders, submitPeerReview, submitProposal, uploadDraftManuscript } from "@/app/actions";
+import { adminUploadDraftManuscript, generatePeerReviewAssignments, reviewProposal, saveCallSettings, savePeerReviewSettings, sendBulkAuthorEmail, sendPeerReviewReminders, submitPeerReview, submitProposal, uploadDraftManuscript } from "@/app/actions";
 import { AuthButtons } from "@/components/auth-buttons";
 import { workflowStages } from "@/lib/sample-data";
 
@@ -684,7 +684,7 @@ function AdminView({
       <div className="admin-tab-panel">
         {adminTab === "proposals" ? <ReviewWorkspace title="Admin Proposal Board" book={book} chapters={chapters} canDecide /> : null}
         {adminTab === "peer-review" ? <PeerReviewAdminPanel book={book} chapters={approvedChapters} settings={peerReviewSettings} assignments={peerReviewAssignments} /> : null}
-        {adminTab === "authors" ? <ApprovedAuthorsPanel chapters={approvedChapters} /> : null}
+        {adminTab === "authors" ? <ApprovedAuthorsPanel book={book} chapters={approvedChapters} /> : null}
         {adminTab === "call" ? <CallSettingsForm book={book.id ? book : undefined} hasBooks={books.length > 0} /> : null}
         {adminTab === "workflow" ? <WorkflowPanel book={book} stats={stats} /> : null}
       </div>
@@ -692,7 +692,7 @@ function AdminView({
   );
 }
 
-function ApprovedAuthorsPanel({ chapters }: { chapters: ChapterRecord[] }) {
+function ApprovedAuthorsPanel({ book, chapters }: { book: BookRecord; chapters: ChapterRecord[] }) {
   const approvedAuthors = chapters
     .map((chapter) => ({
       id: chapter.id,
@@ -703,6 +703,8 @@ function ApprovedAuthorsPanel({ chapters }: { chapters: ChapterRecord[] }) {
     .filter((author) => author.email);
   const emailList = approvedAuthors.map((author) => author.email).join(", ");
   const mailtoHref = emailList ? `mailto:?bcc=${encodeURIComponent(emailList)}&subject=${encodeURIComponent("ChapterFlow update for approved authors")}` : "";
+  const [bulkTemplateId, setBulkTemplateId] = useState("october-author-meeting");
+  const selectedTemplate = reviewEmailTemplates.find((template) => template.id === bulkTemplateId) ?? reviewEmailTemplates[0];
 
   async function copyEmails() {
     if (!emailList) return;
@@ -733,8 +735,34 @@ function ApprovedAuthorsPanel({ chapters }: { chapters: ChapterRecord[] }) {
           </div>
         </>
       ) : null}
+      <form action={sendBulkAuthorEmail} className="bulk-email-form">
+        <div>
+          <h3>Send personalised email to authors</h3>
+          <p className="muted">This sends one separate email per author using the selected template and personalises placeholders such as {"{{author_name}}"} and {"{{chapter_title}}"}.</p>
+        </div>
+        <input type="hidden" name="book_id" value={book.id} />
+        <input type="hidden" name="email_template_name" value={selectedTemplate.label} />
+        <input type="hidden" name="email_subject" value={selectedTemplate.subject} />
+        <input type="hidden" name="email_template_body" value={selectedTemplate.body} />
+        <div className="form-grid">
+          <label>Audience<select name="audience" defaultValue="current_authors"><option value="current_authors">Current approved authors</option><option value="first_drafts">Authors with first drafts / draft stage</option><option value="all_proposals">All active proposal authors</option></select></label>
+          <label>Email template<select value={bulkTemplateId} onChange={(event) => setBulkTemplateId(event.target.value)}>{reviewEmailTemplates.map((template) => <option key={template.id} value={template.id}>{template.label}</option>)}</select></label>
+        </div>
+        <label>Additional note<textarea name="additional_message" placeholder="Optional: add a short note to include beneath the selected template for every author." /></label>
+        <div className="email-draft">
+          <strong>Bulk email preview</strong>
+          <p><strong>Subject:</strong> {selectedTemplate.subject}</p>
+          <pre>{selectedTemplate.body}</pre>
+        </div>
+        <BulkEmailButton disabled={!book.id || !approvedAuthors.length} />
+      </form>
     </div>
   );
+}
+
+function BulkEmailButton({ disabled }: { disabled: boolean }) {
+  const { pending } = useFormStatus();
+  return <button className={`primary notify-button ${pending ? "sending" : ""}`} disabled={disabled || pending} type="submit">{pending ? "Sending personalised emails..." : "Send personalised email to selected authors"}</button>;
 }
 
 function PeerReviewAdminPanel({

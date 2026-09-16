@@ -548,6 +548,147 @@ export async function reviewProposal(formData: FormData) {
   revalidatePath("/");
 }
 
+export async function sendBulkAuthorEmail(formData: FormData) {
+  const { supabase, user, profile } = await getSignedInProfile();
+
+  if (!["admin", "editor"].includes(String(profile.role))) {
+    throw new Error("Only an administrator can send bulk author emails.");
+  }
+
+  const bookId = textValue(formData, "book_id");
+  const audience = textValue(formData, "audience") || "current_authors";
+  const emailTemplateName = textValue(formData, "email_template_name");
+  const emailSubject = textValue(formData, "email_subject");
+  const emailTemplateBody = textValue(formData, "email_template_body");
+  const additionalMessage = textValue(formData, "additional_message");
+
+  if (!bookId || !emailSubject || !emailTemplateBody) {
+    throw new Error("Choose a template before sending to authors.");
+  }
+
+  const { data: book, error: bookError } = await supabase
+    .from("books")
+    .select("title")
+    .eq("id", bookId)
+    .single();
+
+  if (bookError || !book) {
+    throw new Error(bookError?.message ?? "This book project could not be found.");
+  }
+
+  const { data: chapters, error: chaptersError } = await supabase
+    .from("chapters")
+    .select("id, title, status, stage, current_deadline, profiles:author_id(full_name, email)")
+    .eq("book_id", bookId)
+    .order("created_at", { ascending: true });
+
+  if (chaptersError) {
+    throw new Error(chaptersError.message);
+  }
+
+  const recipients = (chapters ?? [])
+    .filter((chapter) => {
+      if (audience === "first_drafts") return chapter.stage === "first_draft" || chapter.status === "submitted";
+      if (audience === "all_proposals") return chapter.status !== "rejected";
+      return chapter.status === "approved" || chapter.status === "submitted" || chapter.status === "complete" || !String(chapter.stage).includes("proposal");
+    })
+    .map((chapter) => {
+      const author = Array.isArray(chapter.profiles) ? chapter.profiles[0] : chapter.profiles;
+      return {
+        chapterId: chapter.id,
+        chapterTitle: chapter.title,
+        nextDeadline: chapter.current_deadline,
+        authorName: author?.full_name || "there",
+        email: author?.email || ""
+      };
+    })
+    .filter((recipient, index, allRecipients) =>
+      recipient.email && allRecipients.findIndex((match) => match.email.toLowerCase() === recipient.email.toLowerCase()) === index
+    );
+
+  if (!recipients.length) {
+    throw new Error("No matching authors with email addresses were found for this audience.");
+  }
+
+  const chapterFlowUrl = getSiteUrl();
+  const failedEmails: string[] = [];
+
+  for (const recipient of recipients) {
+    const placeholders = {
+      author_name: recipient.authorName,
+      book_title: book.title,
+      chapter_title: recipient.chapterTitle,
+      next_deadline: formatDate(recipient.nextDeadline)
+    };
+    const subject = applyEmailPlaceholders(emailSubject, placeholders);
+    const message = applyEmailPlaceholders(
+      [emailTemplateBody, additionalMessage ? `Additional note:\n${additionalMessage}` : ""].filter(Boolean).join("\n\n"),
+      placeholders
+    );
+    const body = [
+      `Hello ${recipient.authorName},`,
+      "",
+      `This is an update about your chapter for ${book.title}.`,
+      "",
+      `Chapter proposal: ${recipient.chapterTitle}`,
+      "",
+      emailTemplateName ? `Email template: ${emailTemplateName}` : "",
+      "Message:",
+      message,
+      "",
+      `You can sign in to ChapterFlow here: ${chapterFlowUrl}`,
+      "",
+      "Best wishes,",
+      "The ChapterFlow editorial team"
+    ].join("\n");
+    const html = `
+      <p>Hello ${escapeHtml(recipient.authorName)},</p>
+      <p>This is an update about your chapter for <strong>${escapeHtml(book.title)}</strong>.</p>
+      <p><strong>Chapter proposal:</strong> ${escapeHtml(recipient.chapterTitle)}</p>
+      ${emailTemplateName ? `<p><strong>Email template:</strong> ${escapeHtml(emailTemplateName)}</p>` : ""}
+      <p><strong>Message:</strong></p>
+      <p>${escapeHtml(message)}</p>
+      <p><a href="${chapterFlowUrl}">Sign in to ChapterFlow</a></p>
+      <p>Best wishes,<br />The ChapterFlow editorial team</p>
+    `;
+
+    try {
+      await sendResendEmail({
+        to: recipient.email,
+        subject,
+        text: body,
+        html
+      });
+
+      await supabase.from("email_logs").insert({
+        chapter_id: recipient.chapterId,
+        recipient_email: recipient.email,
+        subject,
+        body,
+        status: "sent",
+        sent_by: user.id,
+        sent_at: new Date().toISOString()
+      });
+    } catch {
+      failedEmails.push(recipient.email);
+      await supabase.from("email_logs").insert({
+        chapter_id: recipient.chapterId,
+        recipient_email: recipient.email,
+        subject,
+        body,
+        status: "failed",
+        sent_by: user.id
+      });
+    }
+  }
+
+  if (failedEmails.length) {
+    throw new Error(`Some emails could not be sent: ${failedEmails.join(", ")}`);
+  }
+
+  revalidatePath("/");
+}
+
 export async function savePeerReviewSettings(formData: FormData) {
   const { supabase, user, profile } = await getSignedInProfile();
 

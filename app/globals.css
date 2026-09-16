@@ -60,6 +60,8 @@ h2 { font-size: 1.1rem; line-height: 1.25; }
 .admin-tools, .call-details { background: #f7fafc; border: 1px solid var(--line); border-radius: 8px; display: grid; gap: .75rem; margin-bottom: 1rem; padding: .85rem; }
 .admin-tools h3 { font-size: .95rem; }
 .approved-authors textarea { min-height: 74px; }
+.bulk-email-form { border-top: 1px solid var(--line); display: grid; gap: .8rem; margin-top: .75rem; padding-top: .85rem; }
+.bulk-email-form label { margin-bottom: 0; }
 .author-contact-list { display: grid; gap: .55rem; max-height: 230px; overflow: auto; }
 .author-contact { background: #fff; border: 1px solid var(--line); border-radius: 7px; display: grid; gap: .2rem; padding: .65rem; }
 .author-contact span, .author-contact small { color: var(--muted); font-size: .84rem; overflow-wrap: anywhere; }
