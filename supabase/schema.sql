@@ -149,6 +149,7 @@ create table if not exists public.peer_review_settings (
   id uuid primary key default gen_random_uuid(),
   book_id uuid not null references public.books(id) on delete cascade unique,
   is_open boolean not null default false,
+  required_review_count integer not null default 2,
   review_deadline date,
   instructions text,
   opened_by uuid references public.profiles(id) on delete set null,
@@ -175,15 +176,49 @@ create table if not exists public.peer_reviews (
   assignment_id uuid not null references public.peer_review_assignments(id) on delete cascade unique,
   chapter_id uuid not null references public.chapters(id) on delete cascade,
   reviewer_id uuid not null references public.profiles(id) on delete cascade,
+  structure_items text[],
+  structure_rating text,
   structure_feedback text,
+  mission_alignment_rating text,
   mission_alignment_feedback text,
+  flow_rating text,
+  flow_feedback text,
+  story_rating text,
   story_feedback text,
+  writing_rating text,
+  writing_feedback text,
+  anonymity_rating text,
+  anonymity_feedback text,
   practical_value_feedback text,
   evidence_feedback text,
   recommendations text,
   overall_recommendation text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
+);
+
+alter table public.peer_review_settings add column if not exists required_review_count integer not null default 2;
+alter table public.peer_reviews add column if not exists structure_items text[];
+alter table public.peer_reviews add column if not exists structure_rating text;
+alter table public.peer_reviews add column if not exists mission_alignment_rating text;
+alter table public.peer_reviews add column if not exists flow_rating text;
+alter table public.peer_reviews add column if not exists flow_feedback text;
+alter table public.peer_reviews add column if not exists story_rating text;
+alter table public.peer_reviews add column if not exists writing_rating text;
+alter table public.peer_reviews add column if not exists writing_feedback text;
+alter table public.peer_reviews add column if not exists anonymity_rating text;
+alter table public.peer_reviews add column if not exists anonymity_feedback text;
+
+create table if not exists public.peer_review_feedback_packets (
+  id uuid primary key default gen_random_uuid(),
+  chapter_id uuid not null references public.chapters(id) on delete cascade,
+  sent_by uuid references public.profiles(id) on delete set null,
+  included_review_ids uuid[] not null default '{}',
+  subject text not null,
+  body text not null,
+  status text not null default 'draft',
+  sent_at timestamptz,
+  created_at timestamptz not null default now()
 );
 
 create or replace function public.handle_new_user()
@@ -214,6 +249,7 @@ alter table public.facilitator_books enable row level security;
 alter table public.peer_review_settings enable row level security;
 alter table public.peer_review_assignments enable row level security;
 alter table public.peer_reviews enable row level security;
+alter table public.peer_review_feedback_packets enable row level security;
 
 create or replace function public.is_admin()
 returns boolean language sql security definer set search_path = public as $$
@@ -417,3 +453,9 @@ drop policy if exists "Reviewers can manage their own peer reviews" on public.pe
 create policy "Reviewers can manage their own peer reviews" on public.peer_reviews using (reviewer_id = auth.uid()) with check (reviewer_id = auth.uid());
 drop policy if exists "Facilitators can read peer reviews" on public.peer_reviews;
 create policy "Facilitators can read peer reviews" on public.peer_reviews for select using (public.is_facilitator());
+drop policy if exists "Admins can manage peer review feedback packets" on public.peer_review_feedback_packets;
+create policy "Admins can manage peer review feedback packets" on public.peer_review_feedback_packets using (public.is_admin()) with check (public.is_admin());
+drop policy if exists "Authors can read peer review feedback packets" on public.peer_review_feedback_packets;
+create policy "Authors can read peer review feedback packets" on public.peer_review_feedback_packets for select using (
+  exists (select 1 from public.chapters c where c.id = peer_review_feedback_packets.chapter_id and c.author_id = auth.uid())
+);

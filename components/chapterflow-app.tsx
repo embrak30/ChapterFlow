@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useFormStatus } from "react-dom";
-import { adminUploadDraftManuscript, generatePeerReviewAssignments, reviewProposal, saveCallSettings, savePeerReviewSettings, sendBulkAuthorEmail, sendPeerReviewReminders, submitPeerReview, submitProposal, uploadDraftManuscript } from "@/app/actions";
+import { adminUploadDraftManuscript, generatePeerReviewAssignments, reviewProposal, saveCallSettings, savePeerReviewSettings, sendBulkAuthorEmail, sendPeerReviewFeedbackPacket, sendPeerReviewReminders, submitPeerReview, submitProposal, uploadDraftManuscript } from "@/app/actions";
 import { AuthButtons } from "@/components/auth-buttons";
 import { workflowStages } from "@/lib/sample-data";
 
@@ -70,6 +70,7 @@ type PeerReviewSettingsRecord = {
   id: string;
   book_id: string;
   is_open: boolean;
+  required_review_count: number | null;
   review_deadline: string | null;
   instructions: string | null;
 };
@@ -77,11 +78,19 @@ type PeerReviewSettingsRecord = {
 type PeerReviewRecord = {
   id: string;
   assignment_id: string;
+  structure_items: string[] | null;
+  structure_rating: string | null;
   structure_feedback: string | null;
+  mission_alignment_rating: string | null;
   mission_alignment_feedback: string | null;
+  flow_rating: string | null;
+  flow_feedback: string | null;
+  story_rating: string | null;
   story_feedback: string | null;
-  practical_value_feedback: string | null;
-  evidence_feedback: string | null;
+  writing_rating: string | null;
+  writing_feedback: string | null;
+  anonymity_rating: string | null;
+  anonymity_feedback: string | null;
   recommendations: string | null;
   overall_recommendation: string | null;
   created_at: string;
@@ -160,7 +169,27 @@ const reviewEmailTemplates = [
     subject: "Thank you for submitting your first draft",
     body:
       "Thank you for submitting the first draft of your chapter, \"{{chapter_title}}\".\n\nWe appreciate the time, thought, and care that has gone into developing your chapter so far. Reaching the first draft stage is an important milestone in the process, and we are grateful for your continued commitment to the project.\n\nAt this stage, please continue to keep your own copy of the draft and any notes you may want to return to later. After October 30, we will begin the next stage of the editorial process and will share more detailed information about what happens next, including review, feedback, and any revisions that may be needed.\n\nFor now, thank you again for getting your draft submitted. If you have any immediate questions or concerns, please feel free to contact the editorial team."
+  },
+  {
+    id: "peer-review-test-email-correction",
+    label: "Correction - peer review email sent in error",
+    subject: "Please disregard recent peer review assignment email",
+    body:
+      "You may have received a recent email from ChapterFlow about peer review assignments.\n\nPlease disregard that message for now. It was sent in error while we were testing and configuring the peer review workflow within the system.\n\nNo action is required from you at this stage. We will contact you again when the peer review process is formally ready to begin, with clear instructions and confirmed timelines.\n\nThank you for your understanding, and apologies for any confusion caused."
   }
+];
+
+const chapterStructureItems = [
+  "Chapter title is clear and appropriate",
+  "Short chapter overview is present",
+  "Introduction to the leadership story or experience is included",
+  "School context and rationale are explained",
+  "Key event, decision, challenge, or experience is described",
+  "The chapter explains what happened and why it mattered",
+  "Practical implications for school leaders are included",
+  "Reflection or lessons learned are included",
+  "Concluding recommendations are included",
+  "References or evidence are used where appropriate"
 ];
 
 const fallbackBook: BookRecord = {
@@ -206,6 +235,38 @@ function latestDraftSubmission(chapter?: ChapterRecord | null) {
 function fileHref(file: SubmissionFileRecord) {
   if (file.storage_path.startsWith("http://") || file.storage_path.startsWith("https://")) return file.storage_path;
   return `/api/submission-files/${file.id}`;
+}
+
+function displayChoice(value?: string | null) {
+  return value ? displayStatus(value) : "Not supplied";
+}
+
+function formatPeerReviewForAuthor(review: PeerReviewRecord) {
+  return [
+    `Required structure check: ${review.structure_items?.join(", ") || "No structure items selected."}`,
+    `Structure rating: ${displayChoice(review.structure_rating)}`,
+    `Structure feedback: ${review.structure_feedback || "No feedback supplied."}`,
+    "",
+    `Mission Integrity alignment: ${displayChoice(review.mission_alignment_rating)}`,
+    review.mission_alignment_feedback || "No feedback supplied.",
+    "",
+    `Flow and reader journey: ${displayChoice(review.flow_rating)}`,
+    review.flow_feedback || "No feedback supplied.",
+    "",
+    `Story, voice, and field experience: ${displayChoice(review.story_rating)}`,
+    review.story_feedback || "No feedback supplied.",
+    "",
+    `Writing standard and accessibility: ${displayChoice(review.writing_rating)}`,
+    review.writing_feedback || "No feedback supplied.",
+    "",
+    `Anonymity and contextual confidentiality: ${displayChoice(review.anonymity_rating)}`,
+    review.anonymity_feedback || "No feedback supplied.",
+    "",
+    `Top three actions:`,
+    review.recommendations || "No actions supplied.",
+    "",
+    `Overall recommendation: ${displayChoice(review.overall_recommendation)}`
+  ].join("\n");
 }
 
 export function ChapterFlowApp({ userEmail, userName, userRole, books, chapters, peerReviewSettings, peerReviewAssignments }: ChapterFlowAppProps) {
@@ -620,12 +681,29 @@ function PeerReviewAssignmentCard({ assignment, index }: { assignment: PeerRevie
       <form action={submitPeerReview} className="peer-review-form">
         <input type="hidden" name="assignment_id" value={assignment.id} />
         <input type="hidden" name="chapter_id" value={assignment.chapter_id} />
-        <label>Structure and flow<textarea name="structure_feedback" required defaultValue={existingReview?.structure_feedback ?? ""} placeholder="Comment on the chapter shape, sequence, headings, and whether the reader can follow the argument or story." /></label>
-        <label>Mission Integrity alignment<textarea name="mission_alignment_feedback" required defaultValue={existingReview?.mission_alignment_feedback ?? ""} placeholder="Where does the chapter connect clearly to mission, values, vision, or integrity in leadership practice?" /></label>
-        <label>Strength of the story<textarea name="story_feedback" required defaultValue={existingReview?.story_feedback ?? ""} placeholder="Comment on the lived experience, authenticity, clarity of context, and whether the story feels useful to other leaders." /></label>
-        <label>Practical value for leaders<textarea name="practical_value_feedback" defaultValue={existingReview?.practical_value_feedback ?? ""} placeholder="What practical learning, tools, questions, or implications could be made clearer?" /></label>
-        <label>Use of evidence<textarea name="evidence_feedback" defaultValue={existingReview?.evidence_feedback ?? ""} placeholder="Suggest where research, professional reading, or frameworks could support the chapter without making it too heavy." /></label>
-        <label>Recommendations for improvement<textarea name="recommendations" required defaultValue={existingReview?.recommendations ?? ""} placeholder="Give clear, specific, constructive recommendations the author can act on." /></label>
+        <fieldset className="checklist-field">
+          <legend>Required chapter structure check</legend>
+          <p className="muted">Tick each expected section that is clearly present. Use the written response to identify what is missing, underdeveloped, or out of sequence.</p>
+          {chapterStructureItems.map((item) => (
+            <label className="check-row" key={item}>
+              <input type="checkbox" name="structure_items" value={item} defaultChecked={existingReview?.structure_items?.includes(item)} />
+              <span>{item}</span>
+            </label>
+          ))}
+        </fieldset>
+        <label>Structure rating<select name="structure_rating" required defaultValue={existingReview?.structure_rating ?? ""}><option value="">Select one</option><option value="strong_structure">Strong structure</option><option value="minor_improvements">Mostly clear, minor improvements needed</option><option value="needs_clearer_organisation">Needs clearer organisation</option><option value="significant_restructuring">Significant restructuring needed</option></select></label>
+        <label>Structure feedback<textarea name="structure_feedback" required minLength={120} defaultValue={existingReview?.structure_feedback ?? ""} placeholder="Identify any required sections that are missing, underdeveloped, or out of sequence. Explain what the author should add, move, or strengthen so the chapter follows the expected structure. Please write at least two sentences." /></label>
+        <label>Mission Integrity alignment<select name="mission_alignment_rating" required defaultValue={existingReview?.mission_alignment_rating ?? ""}><option value="">Select one</option><option value="strongly_aligned">Strongly aligned</option><option value="mostly_aligned">Mostly aligned</option><option value="partly_aligned">Partly aligned</option><option value="needs_clearer_alignment">Needs clearer alignment</option></select></label>
+        <label>Mission Integrity feedback<textarea name="mission_alignment_feedback" required minLength={120} defaultValue={existingReview?.mission_alignment_feedback ?? ""} placeholder="Explain how the chapter connects to mission, integrity, values-led leadership, or the wider purpose of the book. Describe where this connection is strongest and where it could be made clearer." /></label>
+        <label>Flow and reader journey<select name="flow_rating" required defaultValue={existingReview?.flow_rating ?? ""}><option value="">Select one</option><option value="very_clear">Very clear and easy to follow</option><option value="mostly_clear">Mostly clear</option><option value="needs_clearer_links">Some sections need clearer links</option><option value="difficult_to_follow">Difficult to follow</option></select></label>
+        <label>Flow feedback<textarea name="flow_feedback" required minLength={120} defaultValue={existingReview?.flow_feedback ?? ""} placeholder="Describe how the chapter moves from idea to idea. Identify any gaps, repetition, unclear transitions, or sections where the reader may need more guidance." /></label>
+        <label>Story, voice, and field experience<select name="story_rating" required defaultValue={existingReview?.story_rating ?? ""}><option value="">Select one</option><option value="strong_authentic_engaging">Strong, authentic, and engaging</option><option value="good_with_development">Good story with some development needed</option><option value="interesting_needs_detail">Interesting but needs more detail</option><option value="story_unclear">Story or lived experience is unclear</option></select></label>
+        <label>Story feedback<textarea name="story_feedback" required minLength={120} defaultValue={existingReview?.story_feedback ?? ""} placeholder="Explain how the chapter presents a real leadership story or field-based experience. Describe what makes the story authentic, useful, or engaging, and where the author could add more detail or clarity." /></label>
+        <label>Writing standard and accessibility<select name="writing_rating" required defaultValue={existingReview?.writing_rating ?? ""}><option value="">Select one</option><option value="clear_engaging_ready">Clear, engaging, and publication-ready</option><option value="minor_edits">Clear overall, with minor edits needed</option><option value="needs_editing">Understandable but needs editing</option><option value="significant_improvement">Needs significant improvement</option></select></label>
+        <label>Writing feedback<textarea name="writing_feedback" required minLength={120} defaultValue={existingReview?.writing_feedback ?? ""} placeholder="Describe the standard of the writing and how accessible it is for school leaders. Identify where the author should simplify, clarify, strengthen, or make the writing more engaging." /></label>
+        <label>Anonymity and contextual confidentiality<select name="anonymity_rating" required defaultValue={existingReview?.anonymity_rating ?? ""}><option value="">Select one</option><option value="no_concerns">No anonymity concerns identified</option><option value="minor_anonymising">Minor details may need anonymising</option><option value="several_details">Several contextual details need attention</option><option value="significant_concerns">Significant anonymity/confidentiality concerns</option></select></label>
+        <label>Anonymity feedback<textarea name="anonymity_feedback" required minLength={120} defaultValue={existingReview?.anonymity_feedback ?? ""} placeholder="Identify any names, roles, locations, institutional details, events, timelines, or contextual clues that could make people or places identifiable. Suggest what could be anonymised, softened, generalised, or removed while preserving the value of the story." /></label>
+        <label>Top three actions<textarea name="recommendations" required minLength={120} defaultValue={existingReview?.recommendations ?? ""} placeholder="List the top three actions the author should take next. Please make them specific and usable." /></label>
         <label>Overall recommendation<select name="overall_recommendation" defaultValue={existingReview?.overall_recommendation ?? "revise_and_resubmit"}><option value="minor_revisions">Minor revisions</option><option value="revise_and_resubmit">Revise and strengthen</option><option value="major_revisions">Major revisions needed</option><option value="ready_for_editorial_review">Ready for editorial review</option></select></label>
         <PeerReviewSubmitButton hasExistingReview={Boolean(existingReview)} />
       </form>
@@ -776,13 +854,17 @@ function PeerReviewAdminPanel({
   settings?: PeerReviewSettingsRecord;
   assignments: PeerReviewAssignmentRecord[];
 }) {
+  const [selectedChapterId, setSelectedChapterId] = useState(chapters[0]?.id ?? "");
+  const requiredReviewCount = settings?.required_review_count ?? 2;
   const chapterCoverage = chapters.map((chapter) => {
     const chapterAssignments = assignments.filter((assignment) => assignment.chapter_id === chapter.id);
     const completed = chapterAssignments.filter((assignment) => assignment.peer_reviews?.length || assignment.status === "completed").length;
     return { chapter, assigned: chapterAssignments.length, completed };
   });
+  const selectedChapter = chapters.find((chapter) => chapter.id === selectedChapterId) ?? chapters[0];
+  const selectedAssignments = selectedChapter ? assignments.filter((assignment) => assignment.chapter_id === selectedChapter.id) : [];
   const incompleteAssignments = assignments.filter((assignment) => !assignment.peer_reviews?.length && assignment.status !== "completed");
-  const canGenerate = chapters.length >= 3;
+  const canGenerate = chapters.length >= requiredReviewCount + 1;
 
   return (
     <div className="admin-tools peer-admin">
@@ -793,6 +875,7 @@ function PeerReviewAdminPanel({
       <form action={savePeerReviewSettings}>
         <input type="hidden" name="book_id" value={book.id} />
         <label>Peer review status<select name="is_open" defaultValue={settings?.is_open ? "open" : "closed"}><option value="closed">Closed to authors</option><option value="open">Open to reviewers</option></select></label>
+        <label>Required reviews per chapter<select name="required_review_count" defaultValue={String(requiredReviewCount)}><option value="2">Two reviews</option><option value="3">Three reviews</option></select></label>
         <label>Review deadline<input type="date" name="review_deadline" defaultValue={settings?.review_deadline ?? ""} /></label>
         <label>Reviewer guidance<textarea name="instructions" defaultValue={settings?.instructions ?? "Please provide constructive, specific feedback on structure, alignment with Mission Integrity, clarity of the story, practical value for other leaders, and light use of evidence."} /></label>
         <button className="primary" type="submit">Save peer review settings</button>
@@ -803,7 +886,7 @@ function PeerReviewAdminPanel({
           <button disabled={!canGenerate} type="submit" name="_action" value="save">Generate assignments</button>
           <button className="primary" disabled={!canGenerate} type="submit" name="_action" value="notify">Generate and email reviewers</button>
         </form>
-        {!canGenerate ? <p className="muted">At least three approved chapters are needed for blind peer review without self-review.</p> : null}
+        {!canGenerate ? <p className="muted">At least {requiredReviewCount + 1} approved chapters are needed for blind peer review without self-review.</p> : null}
         <form action={sendPeerReviewReminders}>
           <input type="hidden" name="book_id" value={book.id} />
           <button disabled={!incompleteAssignments.length} type="submit">Send late review reminders</button>
@@ -812,19 +895,56 @@ function PeerReviewAdminPanel({
       <div className="peer-coverage-list">
         <strong>Review coverage</strong>
         {chapterCoverage.length ? chapterCoverage.map(({ chapter, assigned, completed }) => (
-          <div className="peer-coverage-row" key={chapter.id}>
+          <button className={`peer-coverage-row ${selectedChapter?.id === chapter.id ? "selected" : ""}`} key={chapter.id} onClick={() => setSelectedChapterId(chapter.id)} type="button">
             <span>{chapter.title}</span>
-            <small>{assigned}/2 assigned · {completed}/2 submitted</small>
-          </div>
+            <small>{assigned}/{requiredReviewCount} assigned · {completed}/{requiredReviewCount} submitted</small>
+          </button>
         )) : <p className="muted">Approved chapters will appear here when they are ready for peer review.</p>}
       </div>
+      {selectedChapter ? <PeerReviewPacketEditor chapter={selectedChapter} assignments={selectedAssignments} requiredReviewCount={requiredReviewCount} /> : null}
       <div className="email-draft">
         <strong>Assignment email template</strong>
-        <p>When you choose “Generate and email reviewers”, each reviewer receives their two chapter assignments, the review deadline, your reviewer guidance, and a link back to ChapterFlow.</p>
+        <p>When you choose “Generate and email reviewers”, each reviewer receives their assigned chapters, the review deadline, your reviewer guidance, and a link back to ChapterFlow.</p>
         <strong>Late reminder template</strong>
         <p>The reminder asks reviewers to complete outstanding reviews, names the assigned chapter, repeats the deadline, and invites them to contact the editorial team if there is a problem.</p>
       </div>
     </div>
+  );
+}
+
+function PeerReviewPacketEditor({
+  chapter,
+  assignments,
+  requiredReviewCount
+}: {
+  chapter: ChapterRecord;
+  assignments: PeerReviewAssignmentRecord[];
+  requiredReviewCount: number;
+}) {
+  const completedAssignments = assignments.filter((assignment) => assignment.peer_reviews?.length);
+  return (
+    <form action={sendPeerReviewFeedbackPacket} className="peer-packet-editor">
+      <input type="hidden" name="chapter_id" value={chapter.id} />
+      <div>
+        <h3>Review packet for author</h3>
+        <p className="muted">{completedAssignments.length}/{requiredReviewCount} reviews received. Select the reviews to include, edit the author-facing text if needed, then send the anonymised packet.</p>
+      </div>
+      {completedAssignments.length ? completedAssignments.map((assignment, index) => {
+        const review = assignment.peer_reviews?.[0];
+        const reviewer = singleRecord(assignment.reviewer);
+        if (!review) return null;
+        return (
+          <article className="packet-review" key={assignment.id}>
+            <label className="check-row">
+              <input type="checkbox" name="included_review_ids" value={review.id} defaultChecked />
+              <span>Include Reviewer {index + 1} {reviewer?.email ? `(admin only: ${reviewer.email})` : ""}</span>
+            </label>
+            <textarea name={`edited_review_${review.id}`} defaultValue={formatPeerReviewForAuthor(review)} />
+          </article>
+        );
+      }) : <p className="muted">No completed peer reviews are available for this chapter yet.</p>}
+      <button className="primary" disabled={!completedAssignments.length} type="submit">Send selected anonymised reviews to author</button>
+    </form>
   );
 }
 
