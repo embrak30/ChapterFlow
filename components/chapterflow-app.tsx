@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useFormStatus } from "react-dom";
-import { adminUploadDraftManuscript, generatePeerReviewAssignments, reviewProposal, saveCallSettings, savePeerReviewSettings, sendBulkAuthorEmail, sendPeerReviewFeedbackPacket, sendPeerReviewReminders, submitPeerReview, submitProposal, uploadDraftManuscript } from "@/app/actions";
+import { adminUploadDraftManuscript, generatePeerReviewAssignments, resetPeerReviewProcess, reviewProposal, saveCallSettings, savePeerReviewSettings, sendBulkAuthorEmail, sendPeerReviewFeedbackPacket, sendPeerReviewReminders, submitPeerReview, submitProposal, uploadDraftManuscript } from "@/app/actions";
 import { AuthButtons } from "@/components/auth-buttons";
 import { workflowStages } from "@/lib/sample-data";
 
@@ -890,6 +890,10 @@ function PeerReviewAdminPanel({
         <form action={sendPeerReviewReminders}>
           <input type="hidden" name="book_id" value={book.id} />
           <button disabled={!incompleteAssignments.length} type="submit">Send late review reminders</button>
+        </form>
+        <form action={resetPeerReviewProcess}>
+          <input type="hidden" name="book_id" value={book.id} />
+          <button className="danger-button" type="submit">Close peer review and clear assignments</button>
         </form>
       </div>
       <div className="peer-coverage-list">

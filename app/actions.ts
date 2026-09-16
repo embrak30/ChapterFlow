@@ -837,7 +837,7 @@ export async function generatePeerReviewAssignments(formData: FormData) {
       const html = `
         <p>Hello ${escapeHtml(reviewer.name)},</p>
         <p>The blind peer review stage for <strong>${escapeHtml(book?.title ?? "the edited book project")}</strong> is now open.</p>
-        <p>You have been assigned two chapters to review:</p>
+        <p>You have been assigned ${requiredReviewCount} chapter${requiredReviewCount === 1 ? "" : "s"} to review:</p>
         <ol>${reviewer.chapters.map((title) => `<li>${escapeHtml(title)}</li>`).join("")}</ol>
         <p>Please complete your reviews by <strong>${formatDate(settings?.review_deadline)}</strong>.</p>
         <p>The review process is guided in ChapterFlow. You will be asked to comment on structure, alignment with Mission Integrity, clarity of the story, practical value for school leaders, use of evidence, and recommended improvements.</p>
@@ -848,6 +848,67 @@ export async function generatePeerReviewAssignments(formData: FormData) {
 
       await sendResendEmail({ to: reviewer.email, subject, text: body, html });
     }
+  }
+
+  revalidatePath("/");
+}
+
+export async function resetPeerReviewProcess(formData: FormData) {
+  const { supabase, profile } = await getSignedInProfile();
+
+  if (!["admin", "editor"].includes(String(profile.role))) {
+    throw new Error("Only an administrator can reset peer review assignments.");
+  }
+
+  const bookId = textValue(formData, "book_id");
+
+  if (!bookId) {
+    throw new Error("Choose a book project before resetting peer review.");
+  }
+
+  const { data: chapters, error: chaptersError } = await supabase
+    .from("chapters")
+    .select("id")
+    .eq("book_id", bookId);
+
+  if (chaptersError) {
+    throw new Error(chaptersError.message);
+  }
+
+  const chapterIds = (chapters ?? []).map((chapter) => chapter.id);
+
+  if (chapterIds.length) {
+    const { error: packetError } = await supabase
+      .from("peer_review_feedback_packets")
+      .delete()
+      .in("chapter_id", chapterIds);
+
+    if (packetError) {
+      throw new Error(packetError.message);
+    }
+  }
+
+  const { error: assignmentError } = await supabase
+    .from("peer_review_assignments")
+    .delete()
+    .eq("book_id", bookId);
+
+  if (assignmentError) {
+    throw new Error(assignmentError.message);
+  }
+
+  const { error: settingsError } = await supabase
+    .from("peer_review_settings")
+    .update({
+      is_open: false,
+      opened_by: null,
+      opened_at: null,
+      updated_at: new Date().toISOString()
+    })
+    .eq("book_id", bookId);
+
+  if (settingsError) {
+    throw new Error(settingsError.message);
   }
 
   revalidatePath("/");

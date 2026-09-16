@@ -20,6 +20,7 @@ button, input, select, textarea { font: inherit; }
 button { border: 1px solid var(--line); border-radius: 7px; background: #fff; color: var(--ink); cursor: pointer; font-weight: 700; padding: .72rem .9rem; }
 button.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
 button.primary:hover { background: var(--brand-dark); }
+button.danger-button { background: #fff5f5; border-color: #f4b4ad; color: var(--bad); }
 button:disabled { cursor: wait; opacity: .72; }
 button.notify-button.sending { background: var(--warn); border-color: var(--warn); color: #fff; opacity: 1; }
 a.button-link { align-items: center; background: var(--brand); border: 1px solid var(--brand); border-radius: 7px; color: #fff; display: inline-flex; font-weight: 700; justify-content: center; padding: .72rem .9rem; text-decoration: none; }
