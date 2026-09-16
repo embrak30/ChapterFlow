@@ -855,6 +855,7 @@ function PeerReviewAdminPanel({
   assignments: PeerReviewAssignmentRecord[];
 }) {
   const [selectedChapterId, setSelectedChapterId] = useState(chapters[0]?.id ?? "");
+  const [assignmentConfirmed, setAssignmentConfirmed] = useState(false);
   const requiredReviewCount = settings?.required_review_count ?? 2;
   const chapterCoverage = chapters.map((chapter) => {
     const chapterAssignments = assignments.filter((assignment) => assignment.chapter_id === chapter.id);
@@ -881,10 +882,28 @@ function PeerReviewAdminPanel({
         <button className="primary" type="submit">Save peer review settings</button>
       </form>
       <div className="peer-admin-actions">
-        <form action={generatePeerReviewAssignments}>
+        <form
+          action={generatePeerReviewAssignments}
+          onSubmit={(event) => {
+            const submitter = (event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null;
+            const isEmailAction = submitter?.value === "notify";
+            const message = isEmailAction
+              ? "This will create peer review assignments and immediately email all assigned reviewers. Are you sure you want to continue?"
+              : "This will create peer review assignments. Are you sure you want to continue?";
+            if (!window.confirm(message)) event.preventDefault();
+          }}
+        >
           <input type="hidden" name="book_id" value={book.id} />
-          <button disabled={!canGenerate} type="submit" name="_action" value="save">Generate assignments</button>
-          <button className="primary" disabled={!canGenerate} type="submit" name="_action" value="notify">Generate and email reviewers</button>
+          <div className="warning-box">
+            <strong>Before generating assignments</strong>
+            <p>Only continue when you are ready for the peer review matrix to be created. The email option sends reviewer assignment emails immediately.</p>
+            <label className="check-row">
+              <input type="checkbox" checked={assignmentConfirmed} onChange={(event) => setAssignmentConfirmed(event.target.checked)} />
+              <span>I understand and want to generate peer review assignments.</span>
+            </label>
+          </div>
+          <button disabled={!canGenerate || !assignmentConfirmed} type="submit" name="_action" value="save">Generate assignments</button>
+          <button className="primary" disabled={!canGenerate || !assignmentConfirmed} type="submit" name="_action" value="notify">Generate and email reviewers</button>
         </form>
         {!canGenerate ? <p className="muted">At least {requiredReviewCount + 1} approved chapters are needed for blind peer review without self-review.</p> : null}
         <form action={sendPeerReviewReminders}>

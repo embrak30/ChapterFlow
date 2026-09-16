@@ -167,6 +167,8 @@ textarea { min-height: 110px; resize: vertical; }
 .peer-admin form label { margin-bottom: 0; }
 .peer-admin-actions { display: grid; gap: .75rem; }
 .peer-admin-actions form { display: flex; flex-wrap: wrap; gap: .55rem; }
+.warning-box { background: #fff8e8; border: 1px solid #f2c46d; border-radius: 8px; display: grid; flex-basis: 100%; gap: .45rem; padding: .75rem; }
+.warning-box p { color: var(--muted); font-size: .9rem; line-height: 1.45; }
 .peer-coverage-list { background: #fff; border: 1px solid var(--line); border-radius: 8px; display: grid; gap: .55rem; padding: .75rem; }
 .peer-coverage-row { background: #fff; border: 0; border-top: 1px solid var(--line); border-radius: 0; display: grid; gap: .2rem; padding: .55rem 0 0; text-align: left; }
 .peer-coverage-row.selected { background: #eef6fb; border: 1px solid #c5d7e6; border-radius: 7px; padding: .65rem; }
