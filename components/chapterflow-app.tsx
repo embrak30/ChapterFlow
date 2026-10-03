@@ -164,6 +164,13 @@ const reviewEmailTemplates = [
       "Thank you for submitting your chapter proposal, \"{{chapter_title}}\". We are grateful for the thought you have already put into the project and encourage you to continue developing your ideas and writing process.\n\nWe would like to invite you to an authors meeting on October 11 at 8:00 a.m. UK time. The meeting will last approximately 45 minutes.\n\nGoogle Meet joining information:\nhttps://meet.google.com/ave-show-szf\n\nWe will use this meeting to:\n- See where authors are in the writing process.\n- Finalise expectations for the draft chapter.\n- Support authors who are still shaping or developing their ideas.\n- Give a brief overview of the next stage of the process.\n- Introduce you to the editorial team.\n\nThe purpose of the meeting is to bring our authors together, help everyone stay on track, and make sure we are aligned as the chapters move forward.\n\nIf you have any issues, questions, or concerns before then, you are very welcome to email the editorial team."
   },
   {
+    id: "october-author-meeting-reminder",
+    label: "October 11 author meeting reminder",
+    subject: "Reminder: Author meeting on October 11",
+    body:
+      "This is a reminder that our ChapterFlow author meeting will take place on October 11 at 8:00 a.m. UK time.\n\nGoogle Meet joining information:\nhttps://meet.google.com/ave-show-szf\n\nThe meeting will last approximately 45 minutes. We will use the time to:\n- Bring authors together as we move into the next stage of the writing process.\n- Check where everyone is with their chapter development.\n- Clarify expectations for the draft chapter.\n- Discuss the structure and tone of the chapters.\n- Offer support for authors who are still shaping their ideas.\n- Explain the next steps in the editorial and review process.\n- Introduce or reconnect with the editorial team.\n\nThe purpose of the meeting is to help everyone stay on track, make sure we are aligned, and answer any questions authors may have at this stage.\n\nPlease do your best to attend. If you have any questions before the meeting, feel free to get in touch."
+  },
+  {
     id: "first-draft-received",
     label: "First draft received - next steps after October 30",
     subject: "Thank you for submitting your first draft",
