@@ -221,6 +221,36 @@ create table if not exists public.peer_review_feedback_packets (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.book_agreements (
+  id uuid primary key default gen_random_uuid(),
+  book_id uuid not null references public.books(id) on delete cascade,
+  version integer not null default 1,
+  title text not null default 'Author Contribution and Publication Licence Agreement',
+  publisher text not null default 'Embark Education',
+  strategic_partner text not null default 'Leading Your International School (LYIS)',
+  lead_editor text not null default 'Dr Megel R. Barker',
+  is_active boolean not null default true,
+  created_by uuid references public.profiles(id) on delete set null,
+  created_at timestamptz not null default now(),
+  unique (book_id, version)
+);
+
+create table if not exists public.agreement_acceptances (
+  id uuid primary key default gen_random_uuid(),
+  agreement_id uuid not null references public.book_agreements(id) on delete restrict,
+  book_id uuid not null references public.books(id) on delete cascade,
+  chapter_id uuid not null references public.chapters(id) on delete cascade,
+  author_id uuid not null references public.profiles(id) on delete cascade,
+  signature_name text not null,
+  author_email text not null,
+  institution text,
+  lyis_membership text,
+  confirmations text[] not null default '{}',
+  agreement_snapshot jsonb not null default '{}'::jsonb,
+  accepted_at timestamptz not null default now(),
+  unique (agreement_id, chapter_id, author_id)
+);
+
 create or replace function public.handle_new_user()
 returns trigger
 language plpgsql
@@ -250,6 +280,8 @@ alter table public.peer_review_settings enable row level security;
 alter table public.peer_review_assignments enable row level security;
 alter table public.peer_reviews enable row level security;
 alter table public.peer_review_feedback_packets enable row level security;
+alter table public.book_agreements enable row level security;
+alter table public.agreement_acceptances enable row level security;
 
 create or replace function public.is_admin()
 returns boolean language sql security definer set search_path = public as $$
@@ -459,3 +491,28 @@ drop policy if exists "Authors can read peer review feedback packets" on public.
 create policy "Authors can read peer review feedback packets" on public.peer_review_feedback_packets for select using (
   exists (select 1 from public.chapters c where c.id = peer_review_feedback_packets.chapter_id and c.author_id = auth.uid())
 );
+
+drop policy if exists "Admins can manage book agreements" on public.book_agreements;
+create policy "Admins can manage book agreements" on public.book_agreements using (public.is_admin()) with check (public.is_admin());
+drop policy if exists "Users can read active book agreements" on public.book_agreements;
+create policy "Users can read active book agreements" on public.book_agreements for select using (is_active = true);
+drop policy if exists "Facilitators can read book agreements" on public.book_agreements;
+create policy "Facilitators can read book agreements" on public.book_agreements for select using (public.is_facilitator());
+
+drop policy if exists "Admins can manage agreement acceptances" on public.agreement_acceptances;
+create policy "Admins can manage agreement acceptances" on public.agreement_acceptances using (public.is_admin()) with check (public.is_admin());
+drop policy if exists "Authors can read their agreement acceptances" on public.agreement_acceptances;
+create policy "Authors can read their agreement acceptances" on public.agreement_acceptances for select using (author_id = auth.uid());
+drop policy if exists "Authors can create their agreement acceptances" on public.agreement_acceptances;
+create policy "Authors can create their agreement acceptances" on public.agreement_acceptances for insert with check (
+  author_id = auth.uid()
+  and exists (
+    select 1
+    from public.chapters c
+    where c.id = agreement_acceptances.chapter_id
+      and c.book_id = agreement_acceptances.book_id
+      and c.author_id = auth.uid()
+  )
+);
+drop policy if exists "Facilitators can read agreement acceptances" on public.agreement_acceptances;
+create policy "Facilitators can read agreement acceptances" on public.agreement_acceptances for select using (public.is_facilitator_for(book_id) or public.is_facilitator());

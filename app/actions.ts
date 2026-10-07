@@ -258,6 +258,118 @@ export async function saveCallSettings(formData: FormData) {
   revalidatePath("/");
 }
 
+export async function saveProjectAgreement(formData: FormData) {
+  const { supabase, user, profile } = await getSignedInProfile();
+
+  if (!["admin", "editor"].includes(String(profile.role))) {
+    throw new Error("Only an administrator can edit the author agreement.");
+  }
+
+  const bookId = textValue(formData, "book_id");
+  const agreementId = textValue(formData, "agreement_id");
+  const payload = {
+    book_id: bookId,
+    title: textValue(formData, "title") || "Author Contribution and Publication Licence Agreement",
+    publisher: textValue(formData, "publisher") || "Embark Education",
+    strategic_partner: textValue(formData, "strategic_partner") || "Leading Your International School (LYIS)",
+    lead_editor: textValue(formData, "lead_editor") || "Dr Megel R. Barker",
+    is_active: textValue(formData, "is_active") !== "inactive",
+    created_by: user.id
+  };
+
+  if (!bookId) {
+    throw new Error("Choose a book project before saving the author agreement.");
+  }
+
+  const response = agreementId
+    ? await supabase.from("book_agreements").update(payload).eq("id", agreementId)
+    : await supabase.from("book_agreements").insert(payload);
+
+  if (response.error) {
+    throw new Error(response.error.message);
+  }
+
+  revalidatePath("/");
+}
+
+export async function acceptAuthorAgreement(formData: FormData) {
+  const { supabase, user } = await getSignedInProfile();
+
+  const agreementId = textValue(formData, "agreement_id");
+  const bookId = textValue(formData, "book_id");
+  const chapterId = textValue(formData, "chapter_id");
+  const signatureName = textValue(formData, "signature_name");
+  const authorEmail = textValue(formData, "author_email");
+  const institution = textValue(formData, "institution");
+  const lyisMembership = textValue(formData, "lyis_membership");
+  const confirmations = formValues(formData, "confirmations");
+
+  if (!agreementId || !bookId || !chapterId || !signatureName || !authorEmail || confirmations.length < 5) {
+    throw new Error("Please complete the agreement confirmations and signature fields before submitting.");
+  }
+
+  const { data: chapter, error: chapterError } = await supabase
+    .from("chapters")
+    .select("id, title, author_id, books:book_id(title)")
+    .eq("id", chapterId)
+    .eq("book_id", bookId)
+    .eq("author_id", user.id)
+    .single();
+
+  if (chapterError || !chapter) {
+    throw new Error("This agreement could not be matched to your chapter.");
+  }
+
+  const { data: agreement, error: agreementError } = await supabase
+    .from("book_agreements")
+    .select("*")
+    .eq("id", agreementId)
+    .eq("book_id", bookId)
+    .eq("is_active", true)
+    .single();
+
+  if (agreementError || !agreement) {
+    throw new Error("The active agreement for this project could not be found.");
+  }
+
+  const book = Array.isArray(chapter.books) ? chapter.books[0] : chapter.books;
+  const agreementSnapshot = {
+    agreement_id: agreement.id,
+    agreement_title: agreement.title,
+    agreement_version: agreement.version,
+    book_title: book?.title ?? "Mission Integrity",
+    chapter_title: chapter.title,
+    publisher: agreement.publisher,
+    strategic_partner: agreement.strategic_partner,
+    lead_editor: agreement.lead_editor,
+    accepted_text_summary: "Author accepted the project Author Contribution and Publication Licence Agreement through ChapterFlow.",
+    confirmations
+  };
+
+  const { error } = await supabase.from("agreement_acceptances").upsert(
+    {
+      agreement_id: agreementId,
+      book_id: bookId,
+      chapter_id: chapterId,
+      author_id: user.id,
+      signature_name: signatureName,
+      author_email: authorEmail,
+      institution,
+      lyis_membership: lyisMembership,
+      confirmations,
+      agreement_snapshot: agreementSnapshot,
+      accepted_at: new Date().toISOString()
+    },
+    { onConflict: "agreement_id,chapter_id,author_id" }
+  );
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  revalidatePath("/");
+}
+
 export async function submitProposal(formData: FormData) {
   const { supabase, user } = await getSignedInProfile();
 

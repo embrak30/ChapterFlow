@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useFormStatus } from "react-dom";
-import { adminUploadDraftManuscript, generatePeerReviewAssignments, resetPeerReviewProcess, reviewProposal, saveCallSettings, savePeerReviewSettings, sendBulkAuthorEmail, sendPeerReviewFeedbackPacket, sendPeerReviewReminders, submitPeerReview, submitProposal, uploadDraftManuscript } from "@/app/actions";
+import { acceptAuthorAgreement, adminUploadDraftManuscript, generatePeerReviewAssignments, resetPeerReviewProcess, reviewProposal, saveCallSettings, savePeerReviewSettings, saveProjectAgreement, sendBulkAuthorEmail, sendPeerReviewFeedbackPacket, sendPeerReviewReminders, submitPeerReview, submitProposal, uploadDraftManuscript } from "@/app/actions";
 import { AuthButtons } from "@/components/auth-buttons";
 import { workflowStages } from "@/lib/sample-data";
 
@@ -110,6 +110,34 @@ type PeerReviewAssignmentRecord = {
   peer_reviews?: PeerReviewRecord[];
 };
 
+type BookAgreementRecord = {
+  id: string;
+  book_id: string;
+  version: number;
+  title: string;
+  publisher: string;
+  strategic_partner: string;
+  lead_editor: string;
+  is_active: boolean;
+  created_at: string;
+};
+
+type AgreementAcceptanceRecord = {
+  id: string;
+  agreement_id: string;
+  book_id: string;
+  chapter_id: string;
+  author_id: string;
+  signature_name: string;
+  author_email: string;
+  institution: string | null;
+  lyis_membership: string | null;
+  confirmations: string[] | null;
+  accepted_at: string;
+  profiles?: { full_name: string | null; email: string | null } | Array<{ full_name: string | null; email: string | null }> | null;
+  chapters?: { title: string | null } | Array<{ title: string | null }> | null;
+};
+
 type ChapterFlowAppProps = {
   userEmail?: string | null;
   userName?: string | null;
@@ -118,6 +146,8 @@ type ChapterFlowAppProps = {
   chapters: ChapterRecord[];
   peerReviewSettings: PeerReviewSettingsRecord[];
   peerReviewAssignments: PeerReviewAssignmentRecord[];
+  bookAgreements: BookAgreementRecord[];
+  agreementAcceptances: AgreementAcceptanceRecord[];
 };
 
 const reviewEmailTemplates = [
@@ -179,10 +209,10 @@ const reviewEmailTemplates = [
   },
   {
     id: "author-publication-licence-agreement",
-    label: "Author contribution and publication licence agreement",
-    subject: "Author contribution and publication licence agreement for Mission Integrity",
+    label: "Author agreement signing request",
+    subject: "Please review and sign the Mission Integrity author agreement",
     body:
-      "Dear {{author_name}},\n\nThank you again for your contribution to Mission Integrity. Following the author meeting and as we move from first drafts into the next editorial stage, we are sharing the author contribution and publication licence agreement for the volume.\n\nPlease review the agreement below carefully. It confirms the basis on which your chapter, \"{{chapter_title}}\", will continue through editorial development, review and possible final publication. You retain copyright in your own original contribution, while granting Embark Education the publication rights needed to edit, publish, distribute and promote the chapter as part of the book.\n\nIf you have any questions about the agreement, please contact the editorial team before signing or confirming acceptance.\n\nAUTHOR CONTRIBUTION AND PUBLICATION LICENCE AGREEMENT\n\nEdited Volume: Mission Integrity\n\nThis Author Contribution and Publication Licence Agreement (\"Agreement\") is between:\n\nPublisher: Embark Education (\"Publisher\")\n\nand\n\nAuthor(s): {{author_name}} (\"Author\")\n\nin relation to the Author's contribution to the edited volume currently titled Mission Integrity (\"the Book\").\n\nLead Editor: Dr Megel R. Barker\nStrategic Partner: Leading Your International School (LYIS)\n\n1. Contribution and Editorial Process\n\nThe Author has submitted a proposal and/or draft chapter for consideration for inclusion in the Book.\n\nParticipation in the project involves an editorial development process that may include peer review, editorial feedback, revision and final approval.\n\nThe Author agrees to engage constructively with this process and to make reasonable revisions within the agreed publication timetable.\n\nAcceptance of a proposal or participation in the editorial process does not guarantee final publication. Final acceptance will occur once the chapter has satisfactorily completed the editorial and review process.\n\n2. Copyright\n\nThe Author retains copyright in their original contribution.\n\nNothing in this Agreement transfers ownership of the Author's copyright to the Publisher or Strategic Partner.\n\nThe Author instead grants the Publisher the publication rights described in this Agreement.\n\n3. Licence to Publish\n\nUpon final acceptance of the chapter, the Author grants the Publisher a worldwide licence to edit, reproduce, publish, distribute, sell and promote the chapter as part of the Book.\n\nThis licence includes the right to:\n- publish the Book in print, electronic and other appropriate formats;\n- distribute and sell the Book internationally;\n- distribute the Book through retailers, distributors, educational organisations, conferences and online platforms;\n- include the chapter in subsequent printings of the same edition;\n- reproduce reasonable extracts for marketing and promotional purposes;\n- use the chapter title, abstract and Author's approved professional biography in connection with the Book; and\n- provide appropriate previews or extracts to retailers, libraries, distributors and other services supporting publication and distribution.\n\nThis licence relates to the chapter as included within the Book and does not transfer ownership of the Author's underlying ideas, research or other independent work.\n\n4. Author's Use and Republication\n\nThe Author retains the right to use the ideas and material contained within their contribution in teaching, research, presentations and other professional activities.\n\nTo protect the integrity and commercial viability of the initial publication, the Author agrees not to publish the complete chapter, or a substantially identical version of it, in another book, journal, website or publication for 12 months following publication of the Book, without prior written agreement from the Publisher.\n\nThis restriction does not prevent the Author from presenting, discussing, teaching or developing the ideas contained within the chapter.\n\nFollowing the 12-month period, the Author may republish or substantially adapt the contribution, provided appropriate acknowledgement is made of its original publication in the Book.\n\n5. Author Responsibilities\n\nThe Author confirms that:\n- the contribution is substantially their own original work;\n- they have the authority to enter into this Agreement;\n- all named co-authors have agreed to its submission and publication;\n- appropriate citations and acknowledgements have been provided;\n- necessary permissions have been obtained for third-party copyrighted material;\n- the work has not previously been published in substantially the same form unless disclosed to the Publisher;\n- the contribution does not knowingly contain defamatory, unlawful or materially misleading material;\n- appropriate ethical and professional requirements have been followed where research participants or data are involved; and\n- significant conflicts of interest relevant to the contribution have been disclosed.\n\n6. Artificial Intelligence\n\nAuthors remain fully responsible for the originality, accuracy, integrity and appropriate attribution of all material submitted under their name.\n\nAny substantive use of generative artificial intelligence in developing the contribution should be disclosed to the Lead Editor.\n\nArtificial intelligence systems cannot be identified as authors or co-authors.\n\nAuthors are responsible for ensuring that the use of any technological tool does not compromise confidential information, research data, copyright, privacy or the integrity of the publication.\n\n7. Review and Editorial Decisions\n\nContributions may undergo peer review, editorial review, or both.\n\nThe Author agrees to:\n- respond reasonably to editorial and reviewer feedback;\n- undertake agreed revisions;\n- meet reasonable editorial deadlines; and\n- review the final edited version when requested.\n\nThe Publisher and Lead Editor may make reasonable changes relating to grammar, formatting, referencing, consistency and house style.\n\nChanges that materially affect the meaning or substance of the Author's work will normally be referred to the Author before publication.\n\nThe Publisher and Lead Editor retain responsibility for final acceptance.\n\nA contribution may be declined where required revisions are not satisfactorily completed, deadlines are repeatedly missed, significant ethical or originality concerns arise, the chapter falls materially outside the scope of the Book, or the contribution does not reach the required publication standard.\n\nWhere practical, concerns will be communicated to the Author with an opportunity to address them before a final decision is made.\n\n8. Withdrawal\n\nAn Author may withdraw their contribution before final acceptance by notifying the Lead Editor in writing.\n\nOnce a chapter has been finally accepted and has entered copy-editing, typesetting or production, withdrawal will require agreement from the Publisher, except where compelling legal, ethical or research-integrity circumstances exist.\n\nThis reflects the editorial, production and financial commitments made once a manuscript enters final production.\n\n9. Conference and Professional Activities\n\nThe Book is intended to connect with the LYIS Conference, including, where practicable, an official book launch.\n\nContributors may also be invited to participate in author panels, conference presentations, book-launch activities, webinars, professional discussions, interviews, podcasts and other activities associated with the themes of the Book.\n\nParticipation in these additional activities is encouraged but voluntary and will be arranged separately.\n\nTravel, accommodation, conference registration or other expenses associated with participation should not be assumed to be covered by the Publisher or Strategic Partner unless separately agreed.\n\n10. Promotion and Related Content\n\nThe Author permits the Publisher and Strategic Partner to use the Author's name, professional title and affiliation, approved professional biography, chapter title, abstract, approved photograph where provided, and reasonable extracts from the chapter for the purpose of promoting the Book and activities directly associated with it.\n\nWhere an interview, podcast, webinar, video or other substantial new piece of content involving the Author is proposed, participation will be by invitation and agreement.\n\nThis Agreement does not automatically give the Publisher or Strategic Partner ownership of new content independently created by the Author.\n\n11. Commercial Derivative Works\n\nThe licence granted under this Agreement relates primarily to the publication, distribution and promotion of the Book.\n\nIf the Publisher or Strategic Partner wishes to substantially reproduce or adapt an Author's contribution for a separate commercial product, course, publication, training programme or other product not reasonably considered part of the promotion or distribution of the Book, this will be subject to separate agreement where appropriate.\n\n12. Royalties and Financial Arrangements\n\nIndividual contributing Authors will not ordinarily receive royalties from sales of the edited volume.\n\nThe Book is being developed as a collaborative professional and scholarly publication. Income generated through publication will be managed under the commercial arrangements governing the Book.\n\nThis does not affect the Author's continued ownership of copyright in their individual contribution.\n\nAny separate commissioned work undertaken by an Author outside the scope of their chapter will be subject to a separate agreement where appropriate.\n\n13. Author Copies\n\nEach contributing Author whose chapter is included in the final Book will receive one complimentary electronic copy. Additional print or electronic copy arrangements, including any author rate, will be communicated before publication.\n\n14. Corrections and Publication Integrity\n\nAuthors should notify the Lead Editor promptly if they discover a significant factual error, attribution issue, ethical concern or other matter affecting the integrity of their contribution.\n\nThe Publisher may issue corrections or amendments and, in exceptional circumstances, withdraw material where necessary to protect the integrity of the publication.\n\n15. Publication Schedule\n\nThe project is working towards publication in advance of the LYIS Conference, with an official launch associated with the conference where practicable.\n\nAuthors agree to make reasonable efforts to meet the editorial deadlines necessary to achieve this timetable.\n\nThe Publisher will communicate significant changes to the anticipated publication schedule.\n\n16. Strategic Partner and Organisational Engagement\n\nLeading Your International School (LYIS) is the Strategic Partner associated with the development of this edited volume.\n\nContributors to the Book may include both existing members of LYIS and invited contributors from the wider professional, academic and educational community.\n\nMembership of LYIS is not, unless explicitly stated prior to acceptance of a contribution, a condition of publication.\n\nThe Book is intended to strengthen and extend the professional community associated with LYIS. Contributors who are not currently members may therefore be invited to become members and to participate more widely in the organisation's activities, including conferences, professional discussions, research initiatives, webinars and future publications.\n\nAny decision to become a member of LYIS remains separate from the editorial assessment and publication of an Author's contribution.\n\nSelection and final acceptance of chapters will be based upon the quality, relevance and suitability of the contribution and its alignment with the purpose and editorial standards of the Book.\n\nThe Strategic Partner does not acquire ownership of an Author's contribution or copyright through either the Author's membership or its involvement in the publication.\n\n17. Publisher and Strategic Partner\n\nEmbark Education is the Publisher and is responsible for the editorial management, production and publication of the Book.\n\nLeading Your International School (LYIS) is the Strategic Partner associated with the project.\n\nNeither party acquires ownership of the Author's copyright through its involvement with the Book.\n\n18. Entire Understanding\n\nThis Agreement, together with the Author Guidelines already provided for the project, establishes the basis upon which the Author's contribution will proceed through editorial development and publication.\n\nAny significant variation to these terms should be agreed in writing.\n\nAUTHOR ACCEPTANCE\n\nBook Title: Mission Integrity\nChapter Title: {{chapter_title}}\nAuthor Name(s): {{author_name}}\nInstitution/Organisation: ______________________________\nMembership of Leading Your International School (LYIS), if applicable: ______________________________\nEmail: ______________________________\n\nI confirm that I have read and understood the terms of this Author Contribution and Publication Licence Agreement and agree to the publication of my contribution on this basis.\n\nSignature: ______________________________\nDate: ______________________________\n\nFOR THE PUBLISHER\n\nName: Dr Megel R. Barker\nPosition: Lead Editor / Publisher\nPublishing Entity: Embark Education\nSignature: ______________________________\nDate: ______________________________"
+      "Dear {{author_name}},\n\nThank you again for your contribution to Mission Integrity and for the work you are doing on \"{{chapter_title}}\".\n\nAs we move from first drafts into the next editorial stage, please sign in to ChapterFlow and open the Author agreement section in your author dashboard. The agreement page sets out the contribution and publication licence for the project, including copyright, publication rights, author responsibilities, editorial review, promotion, and the 12-month republication restriction.\n\nYou will be asked to read the agreement, confirm the key points, type your signature, and submit it electronically. Once submitted, ChapterFlow will save the signed record against your chapter, so no separate paper form is needed.\n\nIf you have any questions about the agreement, please contact the editorial team before signing."
   },
   {
     id: "peer-review-test-email-correction",
@@ -204,6 +234,46 @@ const chapterStructureItems = [
   "Reflection or lessons learned are included",
   "Concluding recommendations are included",
   "References or evidence are used where appropriate"
+];
+
+const agreementSections = [
+  {
+    title: "Contribution and Editorial Process",
+    body: "You have submitted a proposal and/or draft chapter for consideration for Mission Integrity. Participation includes editorial development, possible peer review, feedback, revision and final approval. Acceptance of a proposal or participation in review does not guarantee final publication."
+  },
+  {
+    title: "Copyright and Licence to Publish",
+    body: "You retain copyright in your original contribution. Upon final acceptance, you grant the publisher a worldwide licence to edit, reproduce, publish, distribute, sell and promote your chapter as part of the book in print, electronic and appropriate related formats."
+  },
+  {
+    title: "Author Use and Republication",
+    body: "You may continue to use the ideas from your chapter in teaching, research, presentations and professional activity. To protect the first publication, you agree not to publish the complete chapter, or a substantially identical version, elsewhere for 12 months after publication without prior written agreement."
+  },
+  {
+    title: "Author Responsibilities",
+    body: "You confirm that the contribution is substantially your own original work, that co-authors have agreed where applicable, that citations and permissions are complete, and that the chapter does not knowingly contain defamatory, unlawful or materially misleading material."
+  },
+  {
+    title: "Artificial Intelligence",
+    body: "You remain responsible for originality, accuracy, attribution and integrity. Any substantive use of generative artificial intelligence in developing the chapter should be disclosed to the lead editor. AI systems cannot be listed as authors or co-authors."
+  },
+  {
+    title: "Review, Withdrawal and Publication Integrity",
+    body: "The publisher and lead editor may make reasonable changes for grammar, formatting, referencing, consistency and house style. Material changes will normally be referred back to you. Withdrawal after final acceptance and production will require agreement except for compelling legal, ethical or research-integrity reasons."
+  },
+  {
+    title: "Promotion, Conference Activity and Financial Arrangements",
+    body: "The publisher and strategic partner may use your name, approved biography, affiliation, chapter title, abstract, photograph where provided, and reasonable extracts to promote the book. Authors will not ordinarily receive royalties from the edited volume. Additional activities such as webinars, panels or conference events are encouraged but voluntary."
+  }
+];
+
+const agreementConfirmations = [
+  "I have read and understood the Author Contribution and Publication Licence Agreement.",
+  "I confirm that my contribution is substantially my own original work.",
+  "I understand that final publication is subject to editorial review, revision and final acceptance.",
+  "I grant the publisher the licence needed to publish, distribute and promote my chapter as part of Mission Integrity.",
+  "I understand the 12-month restriction on publishing the complete chapter, or a substantially identical version, elsewhere without prior written agreement.",
+  "I understand that any substantive use of generative AI should be disclosed to the lead editor."
 ];
 
 const fallbackBook: BookRecord = {
@@ -283,22 +353,36 @@ function formatPeerReviewForAuthor(review: PeerReviewRecord) {
   ].join("\n");
 }
 
-export function ChapterFlowApp({ userEmail, userName, userRole, books, chapters, peerReviewSettings, peerReviewAssignments }: ChapterFlowAppProps) {
+export function ChapterFlowApp({ userEmail, userName, userRole, books, chapters, peerReviewSettings, peerReviewAssignments, bookAgreements, agreementAcceptances }: ChapterFlowAppProps) {
   const isSignedIn = Boolean(userEmail);
   const canViewAdmin = userRole === "admin";
   const canViewFacilitator = userRole === "facilitator" || canViewAdmin;
   const defaultView = !isSignedIn ? "public" : canViewAdmin ? "admin" : canViewFacilitator ? "facilitator" : "author";
   const [role, setRole] = useState<"public" | "admin" | "facilitator" | "author">(defaultView);
   const openBooks = books.filter((book) => book.public_status === "open");
-  const visibleBooks = openBooks.length ? openBooks : books;
-  const selectedBook = visibleBooks[0] ?? fallbackBook;
+  const authorProjectIds = new Set(
+    userEmail ? chapters.filter((chapter) => chapter.profiles?.email?.toLowerCase() === userEmail.toLowerCase()).map((chapter) => chapter.book_id) : []
+  );
+  const projectOptions = isSignedIn
+    ? books.filter((book) => canViewAdmin || canViewFacilitator || book.public_status === "open" || authorProjectIds.has(book.id))
+    : openBooks;
+  const visibleBooks = projectOptions.length ? projectOptions : books;
+  const [selectedBookId, setSelectedBookId] = useState(visibleBooks[0]?.id ?? "");
+  const selectedBook = visibleBooks.find((book) => book.id === selectedBookId) ?? visibleBooks[0] ?? fallbackBook;
   const bookChapters = selectedBook.id ? chapters.filter((chapter) => chapter.book_id === selectedBook.id) : chapters;
   const selectedPeerReviewSettings = peerReviewSettings.find((settings) => settings.book_id === selectedBook.id);
   const selectedPeerReviewAssignments = selectedBook.id
     ? peerReviewAssignments.filter((assignment) => assignment.book_id === selectedBook.id)
     : peerReviewAssignments;
+  const selectedAgreement = bookAgreements.find((agreement) => agreement.book_id === selectedBook.id && agreement.is_active) ?? bookAgreements.find((agreement) => agreement.book_id === selectedBook.id);
+  const selectedAgreementAcceptances = selectedBook.id
+    ? agreementAcceptances.filter((acceptance) => acceptance.book_id === selectedBook.id)
+    : agreementAcceptances;
   const authorChapter = userEmail
     ? bookChapters.find((chapter) => chapter.profiles?.email?.toLowerCase() === userEmail.toLowerCase())
+    : undefined;
+  const authorAgreementAcceptance = authorChapter
+    ? selectedAgreementAcceptances.find((acceptance) => acceptance.chapter_id === authorChapter.id)
     : undefined;
 
   const stats = useMemo(
@@ -325,16 +409,17 @@ export function ChapterFlowApp({ userEmail, userName, userRole, books, chapters,
             {canViewFacilitator ? <button className={role === "facilitator" ? "active" : ""} onClick={() => setRole("facilitator")}>Facilitator</button> : null}
             {canViewAdmin ? <button className={role === "admin" ? "active" : ""} onClick={() => setRole("admin")}>Admin</button> : null}
           </div>
+          <label className="project-switcher">Project<select value={selectedBook.id} onChange={(event) => setSelectedBookId(event.target.value)}>{visibleBooks.map((book) => <option key={book.id} value={book.id}>{book.title}</option>)}</select></label>
           <AuthButtons isSignedIn={isSignedIn} email={userEmail} />
         </div>
       </header>
 
       {role === "admin" && canViewAdmin ? (
-        <AdminView book={selectedBook} books={books} chapters={bookChapters} stats={stats} peerReviewSettings={selectedPeerReviewSettings} peerReviewAssignments={selectedPeerReviewAssignments} />
+        <AdminView book={selectedBook} books={books} chapters={bookChapters} stats={stats} peerReviewSettings={selectedPeerReviewSettings} peerReviewAssignments={selectedPeerReviewAssignments} agreement={selectedAgreement} agreementAcceptances={selectedAgreementAcceptances} />
       ) : role === "facilitator" && canViewFacilitator ? (
-        <FacilitatorView book={selectedBook} chapters={bookChapters} stats={stats} />
+        <FacilitatorView book={selectedBook} chapters={bookChapters} stats={stats} agreementAcceptances={selectedAgreementAcceptances} />
       ) : role === "author" && isSignedIn ? (
-        <AuthorView book={selectedBook} userName={userName} userEmail={userEmail} chapter={authorChapter} peerReviewSettings={selectedPeerReviewSettings} peerReviewAssignments={selectedPeerReviewAssignments} />
+        <AuthorView book={selectedBook} userName={userName} userEmail={userEmail} chapter={authorChapter} agreement={selectedAgreement} agreementAcceptance={authorAgreementAcceptance} peerReviewSettings={selectedPeerReviewSettings} peerReviewAssignments={selectedPeerReviewAssignments} />
       ) : (
         <PublicView book={selectedBook} isSignedIn={isSignedIn} />
       )}
@@ -501,6 +586,8 @@ function AuthorView({
   userName,
   userEmail,
   chapter,
+  agreement,
+  agreementAcceptance,
   peerReviewSettings,
   peerReviewAssignments
 }: {
@@ -508,6 +595,8 @@ function AuthorView({
   userName?: string | null;
   userEmail?: string | null;
   chapter?: ChapterRecord;
+  agreement?: BookAgreementRecord;
+  agreementAcceptance?: AgreementAcceptanceRecord;
   peerReviewSettings?: PeerReviewSettingsRecord;
   peerReviewAssignments: PeerReviewAssignmentRecord[];
 }) {
@@ -619,9 +708,114 @@ function AuthorView({
         {peerReviewSettings?.is_open ? (
           <PeerReviewAuthorPanel settings={peerReviewSettings} assignments={reviewerAssignments} />
         ) : null}
+        <AuthorAgreementPanel book={book} chapter={chapter} agreement={agreement} acceptance={agreementAcceptance} userName={userName} userEmail={userEmail} hasDraftFile={hasDraftFile} />
       </div>
     </section>
   );
+}
+
+function AuthorAgreementPanel({
+  book,
+  chapter,
+  agreement,
+  acceptance,
+  userName,
+  userEmail,
+  hasDraftFile
+}: {
+  book: BookRecord;
+  chapter?: ChapterRecord;
+  agreement?: BookAgreementRecord;
+  acceptance?: AgreementAcceptanceRecord;
+  userName?: string | null;
+  userEmail?: string | null;
+  hasDraftFile: boolean;
+}) {
+  const canSign = Boolean(chapter && agreement && hasDraftFile);
+
+  return (
+    <section className="panel agreement-panel">
+      <div className="section-heading">
+        <p className="eyebrow">Author agreement</p>
+        <h2>Contribution and publication licence</h2>
+        <p className="muted">This records your agreement inside ChapterFlow, so no separate paper collation is needed.</p>
+      </div>
+      {acceptance ? (
+        <div className="notice">Agreement signed by {acceptance.signature_name} on {formatDate(acceptance.accepted_at)}.</div>
+      ) : !chapter ? (
+        <EmptyState title="Agreement not available yet" message="Submit a proposal first. Once your chapter is active and the agreement is opened for this project, it will appear here." />
+      ) : !hasDraftFile ? (
+        <EmptyState title="Agreement opens after first draft upload" message="The publication agreement will be signed after your first draft has been submitted, so it connects to the correct chapter record." />
+      ) : !agreement ? (
+        <EmptyState title="Agreement not configured" message="The editor has not opened the project agreement yet. When it is ready, you will be able to read and sign it here." />
+      ) : (
+        <>
+          <AgreementText book={book} agreement={agreement} chapterTitle={chapter.title} authorName={userName || userEmail || "Author"} />
+          <form action={acceptAuthorAgreement} className="agreement-sign-form">
+            <input type="hidden" name="agreement_id" value={agreement.id} />
+            <input type="hidden" name="book_id" value={book.id} />
+            <input type="hidden" name="chapter_id" value={chapter.id} />
+            <fieldset className="checklist-field">
+              <legend>Author confirmations</legend>
+              {agreementConfirmations.map((confirmation) => (
+                <label className="check-row" key={confirmation}>
+                  <input type="checkbox" name="confirmations" value={confirmation} required />
+                  <span>{confirmation}</span>
+                </label>
+              ))}
+            </fieldset>
+            <div className="form-grid">
+              <label>Typed signature<input name="signature_name" required defaultValue={userName ?? ""} placeholder="Type your full name" /></label>
+              <label>Email<input name="author_email" required type="email" defaultValue={userEmail ?? ""} /></label>
+              <label>Institution / organisation<input name="institution" placeholder="Your institution or organisation" /></label>
+              <label>LYIS membership, if applicable<input name="lyis_membership" placeholder="Member / Not currently a member / Prefer not to say" /></label>
+            </div>
+            <AcceptAgreementButton disabled={!canSign} />
+          </form>
+        </>
+      )}
+    </section>
+  );
+}
+
+function AgreementText({
+  book,
+  agreement,
+  chapterTitle,
+  authorName
+}: {
+  book: BookRecord;
+  agreement: BookAgreementRecord;
+  chapterTitle: string;
+  authorName: string;
+}) {
+  return (
+    <div className="agreement-text">
+      <div className="agreement-cover">
+        <strong>{agreement.title}</strong>
+        <p><b>Edited Volume:</b> {book.title}</p>
+        <p><b>Chapter:</b> {chapterTitle}</p>
+        <p><b>Author:</b> {authorName}</p>
+        <p><b>Publisher:</b> {agreement.publisher}</p>
+        <p><b>Lead Editor:</b> {agreement.lead_editor}</p>
+        <p><b>Strategic Partner:</b> {agreement.strategic_partner}</p>
+        <p><b>Agreement version:</b> {agreement.version}</p>
+      </div>
+      <div className="agreement-section-list">
+        {agreementSections.map((section, index) => (
+          <article className="agreement-section" key={section.title}>
+            <h3>{index + 1}. {section.title}</h3>
+            <p>{section.body}</p>
+          </article>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AcceptAgreementButton({ disabled }: { disabled: boolean }) {
+  const { pending } = useFormStatus();
+  return <button className="primary" disabled={disabled || pending} type="submit">{pending ? "Saving signed agreement..." : "Accept and sign agreement"}</button>;
 }
 
 function PeerReviewAuthorPanel({
@@ -736,7 +930,9 @@ function AdminView({
   chapters,
   stats,
   peerReviewSettings,
-  peerReviewAssignments
+  peerReviewAssignments,
+  agreement,
+  agreementAcceptances
 }: {
   book: BookRecord;
   books: BookRecord[];
@@ -744,12 +940,15 @@ function AdminView({
   stats: Array<{ label: string; value: number }>;
   peerReviewSettings?: PeerReviewSettingsRecord;
   peerReviewAssignments: PeerReviewAssignmentRecord[];
+  agreement?: BookAgreementRecord;
+  agreementAcceptances: AgreementAcceptanceRecord[];
 }) {
   const approvedChapters = chapters.filter((chapter) => chapter.status === "approved" || !chapter.stage.includes("proposal"));
-  const [adminTab, setAdminTab] = useState<"call" | "authors" | "proposals" | "peer-review" | "workflow">("proposals");
+  const [adminTab, setAdminTab] = useState<"call" | "authors" | "proposals" | "peer-review" | "agreements" | "workflow">("proposals");
   const adminTabs = [
     { id: "proposals", label: "Proposals" },
     { id: "peer-review", label: "Peer review" },
+    { id: "agreements", label: "Agreements" },
     { id: "authors", label: "Authors & email" },
     { id: "call", label: "Call settings" },
     { id: "workflow", label: "Workflow" }
@@ -776,11 +975,75 @@ function AdminView({
       <div className="admin-tab-panel">
         {adminTab === "proposals" ? <ReviewWorkspace title="Admin Proposal Board" book={book} chapters={chapters} canDecide /> : null}
         {adminTab === "peer-review" ? <PeerReviewAdminPanel book={book} chapters={approvedChapters} settings={peerReviewSettings} assignments={peerReviewAssignments} /> : null}
+        {adminTab === "agreements" ? <AgreementAdminPanel book={book} chapters={approvedChapters} agreement={agreement} acceptances={agreementAcceptances} /> : null}
         {adminTab === "authors" ? <ApprovedAuthorsPanel book={book} chapters={approvedChapters} /> : null}
         {adminTab === "call" ? <CallSettingsForm book={book.id ? book : undefined} hasBooks={books.length > 0} /> : null}
         {adminTab === "workflow" ? <WorkflowPanel book={book} stats={stats} /> : null}
       </div>
     </section>
+  );
+}
+
+function AgreementAdminPanel({
+  book,
+  chapters,
+  agreement,
+  acceptances
+}: {
+  book: BookRecord;
+  chapters: ChapterRecord[];
+  agreement?: BookAgreementRecord;
+  acceptances: AgreementAcceptanceRecord[];
+}) {
+  const acceptanceByChapter = new Map(acceptances.map((acceptance) => [acceptance.chapter_id, acceptance]));
+
+  return (
+    <div className="admin-tools agreement-admin">
+      <div>
+        <h3>Project author agreement</h3>
+        <p className="muted">Configure the agreement once for this project, then track which authors have signed it from their ChapterFlow dashboard.</p>
+      </div>
+      <form action={saveProjectAgreement}>
+        <input type="hidden" name="book_id" value={book.id} />
+        <input type="hidden" name="agreement_id" value={agreement?.id ?? ""} />
+        <div className="form-grid">
+          <label>Agreement title<input name="title" defaultValue={agreement?.title ?? "Author Contribution and Publication Licence Agreement"} /></label>
+          <label>Publisher<input name="publisher" defaultValue={agreement?.publisher ?? "Embark Education"} /></label>
+          <label>Strategic partner<input name="strategic_partner" defaultValue={agreement?.strategic_partner ?? "Leading Your International School (LYIS)"} /></label>
+          <label>Lead editor<input name="lead_editor" defaultValue={agreement?.lead_editor ?? "Dr Megel R. Barker"} /></label>
+          <label>Status<select name="is_active" defaultValue={agreement?.is_active === false ? "inactive" : "active"}><option value="active">Active for author signing</option><option value="inactive">Inactive</option></select></label>
+        </div>
+        <button className="primary" type="submit">{agreement ? "Save agreement settings" : "Create agreement for this project"}</button>
+      </form>
+      <div className="agreement-preview">
+        <AgreementText book={book} agreement={agreement ?? {
+          id: "",
+          book_id: book.id,
+          version: 1,
+          title: "Author Contribution and Publication Licence Agreement",
+          publisher: "Embark Education",
+          strategic_partner: "Leading Your International School (LYIS)",
+          lead_editor: "Dr Megel R. Barker",
+          is_active: true,
+          created_at: ""
+        }} chapterTitle="{{chapter_title}}" authorName="{{author_name}}" />
+      </div>
+      <div className="chapter-table agreement-table">
+        <div className="table-row table-head"><span>Chapter</span><span>Author</span><span>Email</span><span>Agreement</span><span>Accepted</span></div>
+        {chapters.length ? chapters.map((chapter) => {
+          const acceptance = acceptanceByChapter.get(chapter.id);
+          return (
+            <div className="table-row" key={chapter.id}>
+              <span>{chapter.title}</span>
+              <span>{chapter.profiles?.full_name || "Author"}</span>
+              <span>{chapter.profiles?.email || "No email"}</span>
+              <span className={acceptance ? "pill complete" : "pill pending-review"}>{acceptance ? "Signed" : "Not signed"}</span>
+              <span>{acceptance ? formatDate(acceptance.accepted_at) : "Waiting"}</span>
+            </div>
+          );
+        }) : <div className="empty-table"><strong>No active authors yet</strong><span>Approved authors and draft-stage chapters will appear here.</span></div>}
+      </div>
+    </div>
   );
 }
 
@@ -1012,11 +1275,13 @@ function WorkflowPanel({ book, stats }: { book: BookRecord; stats: Array<{ label
 function FacilitatorView({
   book,
   chapters,
-  stats
+  stats,
+  agreementAcceptances
 }: {
   book: BookRecord;
   chapters: ChapterRecord[];
   stats: Array<{ label: string; value: number }>;
+  agreementAcceptances: AgreementAcceptanceRecord[];
 }) {
   const stageCounts = [
     { label: "Proposal stage", value: chapters.filter((chapter) => chapter.stage.includes("proposal")).length },
@@ -1024,6 +1289,7 @@ function FacilitatorView({
     { label: "Second drafts", value: chapters.filter((chapter) => chapter.stage === "second_draft").length },
     { label: "Final materials", value: chapters.filter((chapter) => chapter.stage === "final_materials" || chapter.stage === "complete").length }
   ];
+  const signedAgreementCount = agreementAcceptances.length;
 
   return (
     <section className="workspace">
@@ -1038,7 +1304,10 @@ function FacilitatorView({
           <h3>Project timeline</h3>
           <DeadlineStrip book={book} />
         </div>
-        <div className="stat-grid">{stageCounts.map((stat) => <div className="stat" key={stat.label}><strong>{stat.value}</strong><span>{stat.label}</span></div>)}</div>
+        <div className="stat-grid">
+          {stageCounts.map((stat) => <div className="stat" key={stat.label}><strong>{stat.value}</strong><span>{stat.label}</span></div>)}
+          <div className="stat"><strong>{signedAgreementCount}</strong><span>Signed agreements</span></div>
+        </div>
       </aside>
       <ReviewWorkspace title="Facilitator Oversight Board" book={book} chapters={chapters} canDecide={false} />
     </section>

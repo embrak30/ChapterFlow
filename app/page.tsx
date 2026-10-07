@@ -57,6 +57,14 @@ export default async function Home() {
     .from("peer_review_assignments")
     .select("*, reviewer:reviewer_id(full_name, email), chapter:chapter_id(id, book_id, title, abstract, proposal_outline, stage, status, current_deadline, created_at, profiles:author_id(full_name, email), submissions(*, submission_files(*))), peer_reviews(*)")
     .order("created_at", { ascending: true });
+  const { data: bookAgreements } = await supabase
+    .from("book_agreements")
+    .select("*")
+    .order("created_at", { ascending: false });
+  const { data: agreementAcceptances } = await supabase
+    .from("agreement_acceptances")
+    .select("*, profiles:author_id(full_name, email), chapters:chapter_id(title)")
+    .order("accepted_at", { ascending: false });
 
   return (
     <ChapterFlowApp
@@ -67,6 +75,8 @@ export default async function Home() {
       chapters={chapters ?? []}
       peerReviewSettings={peerReviewSettings ?? []}
       peerReviewAssignments={peerReviewAssignments ?? []}
+      bookAgreements={bookAgreements ?? []}
+      agreementAcceptances={agreementAcceptances ?? []}
     />
   );
 }
