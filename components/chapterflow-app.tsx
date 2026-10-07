@@ -1315,23 +1315,37 @@ function FacilitatorView({
 }
 
 function CallSettingsForm({ book, hasBooks }: { book?: BookRecord; hasBooks: boolean }) {
+  const [isCreatingProject, setIsCreatingProject] = useState(!hasBooks);
+  const activeBook = isCreatingProject ? undefined : book;
+
   return (
     <form action={saveCallSettings} className="admin-tools">
-      <h3>{hasBooks ? "Public call settings" : "Create your first call"}</h3>
-      <input type="hidden" name="book_id" value={book?.id ?? ""} />
-      <label>Book / project title<input name="title" required defaultValue={book?.title ?? ""} placeholder="Example: Leadership With Mission Integrity" /></label>
-      <label>Short public welcome<textarea name="call_summary" defaultValue={book?.call_summary ?? ""} placeholder="Welcome authors and explain the kind of story-led chapter you are inviting them to propose." /></label>
-      <label>Chapter spaces<input name="chapter_spaces" defaultValue={book?.chapter_spaces ?? ""} placeholder="Example: 12 chapters + 2 reserve spaces" /></label>
-      <label>Publication target<input name="publication_target" defaultValue={book?.publication_target ?? ""} placeholder="Example: Planned publication February 2027" /></label>
-      <label>Public status<select name="public_status" defaultValue={book?.public_status ?? "draft"}><option value="draft">Draft</option><option value="open">Open</option><option value="closed">Closed</option></select></label>
-      <div className="form-grid">
-        <label>Proposal due<input name="proposal_deadline" type="date" defaultValue={book?.proposal_deadline ?? ""} /></label>
-        <label>Proposal decisions<input name="decision_date" type="date" defaultValue={book?.decision_date ?? ""} /></label>
-        <label>First draft due<input name="first_draft_deadline" type="date" defaultValue={book?.first_draft_deadline ?? ""} /></label>
-        <label>Second draft due<input name="second_draft_deadline" type="date" defaultValue={book?.second_draft_deadline ?? ""} /></label>
-        <label>Final materials due<input name="final_materials_deadline" type="date" defaultValue={book?.final_materials_deadline ?? ""} /></label>
+      <div className="settings-heading-row">
+        <div>
+          <h3>{isCreatingProject ? "Create new project" : "Edit selected project"}</h3>
+          <p className="muted">{isCreatingProject ? "Start a new book, call for chapters, proceedings, or edited volume inside ChapterFlow." : "You are editing the project currently selected in the top project dropdown."}</p>
+        </div>
+        {hasBooks ? (
+          <div className="button-row">
+            <button type="button" onClick={() => setIsCreatingProject(false)}>Edit selected project</button>
+            <button className="primary" type="button" onClick={() => setIsCreatingProject(true)}>Create new project</button>
+          </div>
+        ) : null}
       </div>
-      <button className="primary" type="submit">Save public call</button>
+      <input type="hidden" name="book_id" value={activeBook?.id ?? ""} />
+      <label>Book / project title<input name="title" required defaultValue={activeBook?.title ?? ""} placeholder="Example: Leadership With Mission Integrity" /></label>
+      <label>Short public welcome<textarea name="call_summary" defaultValue={activeBook?.call_summary ?? ""} placeholder="Welcome authors and explain the kind of story-led chapter you are inviting them to propose." /></label>
+      <label>Chapter spaces<input name="chapter_spaces" defaultValue={activeBook?.chapter_spaces ?? ""} placeholder="Example: 12 chapters + 2 reserve spaces" /></label>
+      <label>Publication target<input name="publication_target" defaultValue={activeBook?.publication_target ?? ""} placeholder="Example: Planned publication February 2027" /></label>
+      <label>Public status<select name="public_status" defaultValue={activeBook?.public_status ?? "draft"}><option value="draft">Draft</option><option value="open">Open</option><option value="closed">Closed</option></select></label>
+      <div className="form-grid">
+        <label>Proposal due<input name="proposal_deadline" type="date" defaultValue={activeBook?.proposal_deadline ?? ""} /></label>
+        <label>Proposal decisions<input name="decision_date" type="date" defaultValue={activeBook?.decision_date ?? ""} /></label>
+        <label>First draft due<input name="first_draft_deadline" type="date" defaultValue={activeBook?.first_draft_deadline ?? ""} /></label>
+        <label>Second draft due<input name="second_draft_deadline" type="date" defaultValue={activeBook?.second_draft_deadline ?? ""} /></label>
+        <label>Final materials due<input name="final_materials_deadline" type="date" defaultValue={activeBook?.final_materials_deadline ?? ""} /></label>
+      </div>
+      <button className="primary" type="submit">{isCreatingProject ? "Create project" : "Save selected project"}</button>
     </form>
   );
 }
