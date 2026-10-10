@@ -825,22 +825,36 @@ function PeerReviewAuthorPanel({
   settings: PeerReviewSettingsRecord;
   assignments: PeerReviewAssignmentRecord[];
 }) {
+  const [selectedAssignmentId, setSelectedAssignmentId] = useState(assignments[0]?.id ?? "");
+  const selectedAssignment = assignments.find((assignment) => assignment.id === selectedAssignmentId) ?? assignments[0];
+  const completedCount = assignments.filter((assignment) => assignment.peer_reviews?.length || assignment.status === "completed").length;
+
   return (
     <section className="panel peer-review-panel">
       <div className="section-heading">
         <p className="eyebrow">Blind peer review</p>
-        <h2>Your review assignments</h2>
-        <p className="muted">Please complete two guided reviews. Author names are hidden in this reviewer view.</p>
+        <h2>Peer review reading room</h2>
+        <p className="muted">Work through each assigned chapter in a focused review space. Author names are hidden in this reviewer view.</p>
       </div>
       <div className="peer-review-guidance">
-        <strong>Review deadline: {formatDate(settings.review_deadline)}</strong>
+        <strong>Review deadline: {formatDate(settings.review_deadline)} · {completedCount}/{assignments.length} submitted</strong>
         <p>{settings.instructions || "Focus on helping the author strengthen the chapter structure, connection to Mission Integrity, clarity of the story, practical value, and use of supporting evidence."}</p>
       </div>
       {assignments.length ? (
-        <div className="peer-assignment-list">
-          {assignments.map((assignment, index) => (
-            <PeerReviewAssignmentCard assignment={assignment} index={index} key={assignment.id} />
-          ))}
+        <div className="peer-review-workspace">
+          <aside className="peer-review-queue" aria-label="Peer review assignments">
+            <strong>Assigned chapters</strong>
+            {assignments.map((assignment, index) => (
+              <PeerReviewAssignmentSummary
+                assignment={assignment}
+                index={index}
+                isSelected={selectedAssignment?.id === assignment.id}
+                key={assignment.id}
+                onSelect={() => setSelectedAssignmentId(assignment.id)}
+              />
+            ))}
+          </aside>
+          {selectedAssignment ? <PeerReviewReadingRoom assignment={selectedAssignment} index={assignments.findIndex((assignment) => assignment.id === selectedAssignment.id)} /> : null}
         </div>
       ) : (
         <EmptyState title="No peer review assignments yet" message="When the editor assigns chapters to you, they will appear here." />
@@ -854,68 +868,115 @@ function DraftUploadButton({ hasDraftFile }: { hasDraftFile: boolean }) {
   return <button className="primary" disabled={pending} type="submit">{pending ? "Uploading draft..." : hasDraftFile ? "Upload updated draft" : "Upload first draft"}</button>;
 }
 
-function PeerReviewAssignmentCard({ assignment, index }: { assignment: PeerReviewAssignmentRecord; index: number }) {
+function PeerReviewAssignmentSummary({
+  assignment,
+  index,
+  isSelected,
+  onSelect
+}: {
+  assignment: PeerReviewAssignmentRecord;
+  index: number;
+  isSelected: boolean;
+  onSelect: () => void;
+}) {
+  const chapter = singleRecord(assignment.chapter);
+  const existingReview = assignment.peer_reviews?.[0];
+
+  return (
+    <button className={`peer-review-queue-item ${isSelected ? "selected" : ""}`} onClick={onSelect} type="button">
+      <span>Assigned chapter {index + 1}</span>
+      <strong>{chapter?.title || "Untitled chapter"}</strong>
+      <small className={statusClass(existingReview ? "complete" : assignment.status)}>{existingReview ? "Review submitted" : displayStatus(assignment.status)}</small>
+    </button>
+  );
+}
+
+function PeerReviewReadingRoom({ assignment, index }: { assignment: PeerReviewAssignmentRecord; index: number }) {
   const chapter = singleRecord(assignment.chapter);
   const existingReview = assignment.peer_reviews?.[0];
   const draftSubmission = latestDraftSubmission(chapter);
   const draftFiles = draftSubmission?.submission_files ?? [];
 
   return (
-    <article className="peer-assignment-card">
-      <div className="submission-card-header">
+    <article className="peer-reading-room">
+      <div className="peer-reading-header">
         <div>
-          <p className="eyebrow">Assigned chapter {index + 1}</p>
+          <p className="eyebrow">Reading room · Assigned chapter {index + 1}</p>
           <h3>{chapter?.title || "Untitled chapter"}</h3>
+          <p className="muted">Review the anonymised draft file, then complete the guided form below. Save when your feedback is ready to submit.</p>
         </div>
         <span className={statusClass(existingReview ? "complete" : assignment.status)}>{existingReview ? "Review submitted" : displayStatus(assignment.status)}</span>
       </div>
-      <div className="document-preview compact-preview">
-        <span>Draft available to review</span>
-        {draftFiles.length ? (
-          <div className="file-list">
-            {draftFiles.map((file) => {
-              return (
-                <div className="file-row" key={file.id}>
-                  <span>{file.file_name}</span>
-                  <a className="button-link" href={fileHref(file)} target="_blank" rel="noreferrer">View draft</a>
+      <div className="peer-reading-layout">
+        <section className="peer-document-panel">
+          <div className="document-preview compact-preview">
+            <span>Anonymised draft for review</span>
+            {draftFiles.length ? (
+              <>
+                <p className="muted">Open the draft in a separate tab so you can read the full chapter while keeping this review form available. If the document reveals identifying details, note that in the anonymity section.</p>
+                <div className="file-list">
+                  {draftFiles.map((file) => {
+                    return (
+                      <div className="file-row" key={file.id}>
+                        <span>{file.file_name}</span>
+                        <a className="button-link" href={fileHref(file)} target="_blank" rel="noreferrer">Open draft</a>
+                      </div>
+                    );
+                  })}
                 </div>
-              );
-            })}
+              </>
+            ) : (
+              <p>{draftSubmission?.abstract || chapter?.abstract || chapter?.proposal_outline || "No draft file is attached yet. Use the chapter information available here until the editor adds the draft file."}</p>
+            )}
           </div>
-        ) : (
-          <p>{draftSubmission?.abstract || chapter?.abstract || chapter?.proposal_outline || "No draft file is attached yet. Use the chapter information available here until the editor adds the draft file."}</p>
-        )}
+          <div className="review-helper-card">
+            <strong>Blind review reminder</strong>
+            <p>Do not try to identify the author. Focus on the chapter, the reader experience, the structure, and the practical value. Flag names, school details, locations, roles, or timelines that could compromise anonymity.</p>
+          </div>
+          <div className="review-helper-card">
+            <strong>Expected structure</strong>
+            <ul>
+              {chapterStructureItems.slice(0, 8).map((item) => <li key={item}>{item}</li>)}
+            </ul>
+          </div>
+        </section>
+        <PeerReviewForm assignment={assignment} existingReview={existingReview} />
       </div>
-      <form action={submitPeerReview} className="peer-review-form">
-        <input type="hidden" name="assignment_id" value={assignment.id} />
-        <input type="hidden" name="chapter_id" value={assignment.chapter_id} />
-        <fieldset className="checklist-field">
-          <legend>Required chapter structure check</legend>
-          <p className="muted">Tick each expected section that is clearly present. Use the written response to identify what is missing, underdeveloped, or out of sequence.</p>
-          {chapterStructureItems.map((item) => (
-            <label className="check-row" key={item}>
-              <input type="checkbox" name="structure_items" value={item} defaultChecked={existingReview?.structure_items?.includes(item)} />
-              <span>{item}</span>
-            </label>
-          ))}
-        </fieldset>
-        <label>Structure rating<select name="structure_rating" required defaultValue={existingReview?.structure_rating ?? ""}><option value="">Select one</option><option value="strong_structure">Strong structure</option><option value="minor_improvements">Mostly clear, minor improvements needed</option><option value="needs_clearer_organisation">Needs clearer organisation</option><option value="significant_restructuring">Significant restructuring needed</option></select></label>
-        <label>Structure feedback<textarea name="structure_feedback" required minLength={120} defaultValue={existingReview?.structure_feedback ?? ""} placeholder="Identify any required sections that are missing, underdeveloped, or out of sequence. Explain what the author should add, move, or strengthen so the chapter follows the expected structure. Please write at least two sentences." /></label>
-        <label>Mission Integrity alignment<select name="mission_alignment_rating" required defaultValue={existingReview?.mission_alignment_rating ?? ""}><option value="">Select one</option><option value="strongly_aligned">Strongly aligned</option><option value="mostly_aligned">Mostly aligned</option><option value="partly_aligned">Partly aligned</option><option value="needs_clearer_alignment">Needs clearer alignment</option></select></label>
-        <label>Mission Integrity feedback<textarea name="mission_alignment_feedback" required minLength={120} defaultValue={existingReview?.mission_alignment_feedback ?? ""} placeholder="Explain how the chapter connects to mission, integrity, values-led leadership, or the wider purpose of the book. Describe where this connection is strongest and where it could be made clearer." /></label>
-        <label>Flow and reader journey<select name="flow_rating" required defaultValue={existingReview?.flow_rating ?? ""}><option value="">Select one</option><option value="very_clear">Very clear and easy to follow</option><option value="mostly_clear">Mostly clear</option><option value="needs_clearer_links">Some sections need clearer links</option><option value="difficult_to_follow">Difficult to follow</option></select></label>
-        <label>Flow feedback<textarea name="flow_feedback" required minLength={120} defaultValue={existingReview?.flow_feedback ?? ""} placeholder="Describe how the chapter moves from idea to idea. Identify any gaps, repetition, unclear transitions, or sections where the reader may need more guidance." /></label>
-        <label>Story, voice, and field experience<select name="story_rating" required defaultValue={existingReview?.story_rating ?? ""}><option value="">Select one</option><option value="strong_authentic_engaging">Strong, authentic, and engaging</option><option value="good_with_development">Good story with some development needed</option><option value="interesting_needs_detail">Interesting but needs more detail</option><option value="story_unclear">Story or lived experience is unclear</option></select></label>
-        <label>Story feedback<textarea name="story_feedback" required minLength={120} defaultValue={existingReview?.story_feedback ?? ""} placeholder="Explain how the chapter presents a real leadership story or field-based experience. Describe what makes the story authentic, useful, or engaging, and where the author could add more detail or clarity." /></label>
-        <label>Writing standard and accessibility<select name="writing_rating" required defaultValue={existingReview?.writing_rating ?? ""}><option value="">Select one</option><option value="clear_engaging_ready">Clear, engaging, and publication-ready</option><option value="minor_edits">Clear overall, with minor edits needed</option><option value="needs_editing">Understandable but needs editing</option><option value="significant_improvement">Needs significant improvement</option></select></label>
-        <label>Writing feedback<textarea name="writing_feedback" required minLength={120} defaultValue={existingReview?.writing_feedback ?? ""} placeholder="Describe the standard of the writing and how accessible it is for school leaders. Identify where the author should simplify, clarify, strengthen, or make the writing more engaging." /></label>
-        <label>Anonymity and contextual confidentiality<select name="anonymity_rating" required defaultValue={existingReview?.anonymity_rating ?? ""}><option value="">Select one</option><option value="no_concerns">No anonymity concerns identified</option><option value="minor_anonymising">Minor details may need anonymising</option><option value="several_details">Several contextual details need attention</option><option value="significant_concerns">Significant anonymity/confidentiality concerns</option></select></label>
-        <label>Anonymity feedback<textarea name="anonymity_feedback" required minLength={120} defaultValue={existingReview?.anonymity_feedback ?? ""} placeholder="Identify any names, roles, locations, institutional details, events, timelines, or contextual clues that could make people or places identifiable. Suggest what could be anonymised, softened, generalised, or removed while preserving the value of the story." /></label>
-        <label>Top three actions<textarea name="recommendations" required minLength={120} defaultValue={existingReview?.recommendations ?? ""} placeholder="List the top three actions the author should take next. Please make them specific and usable." /></label>
-        <label>Overall recommendation<select name="overall_recommendation" defaultValue={existingReview?.overall_recommendation ?? "revise_and_resubmit"}><option value="minor_revisions">Minor revisions</option><option value="revise_and_resubmit">Revise and strengthen</option><option value="major_revisions">Major revisions needed</option><option value="ready_for_editorial_review">Ready for editorial review</option></select></label>
-        <PeerReviewSubmitButton hasExistingReview={Boolean(existingReview)} />
-      </form>
     </article>
+  );
+}
+
+function PeerReviewForm({ assignment, existingReview }: { assignment: PeerReviewAssignmentRecord; existingReview?: PeerReviewRecord }) {
+  return (
+    <form action={submitPeerReview} className="peer-review-form peer-reading-form">
+      <input type="hidden" name="assignment_id" value={assignment.id} />
+      <input type="hidden" name="chapter_id" value={assignment.chapter_id} />
+      <fieldset className="checklist-field">
+        <legend>Required chapter structure check</legend>
+        <p className="muted">Tick each expected section that is clearly present. Use the written response to identify what is missing, underdeveloped, or out of sequence.</p>
+        {chapterStructureItems.map((item) => (
+          <label className="check-row" key={item}>
+            <input type="checkbox" name="structure_items" value={item} defaultChecked={existingReview?.structure_items?.includes(item)} />
+            <span>{item}</span>
+          </label>
+        ))}
+      </fieldset>
+      <label>Structure rating<select name="structure_rating" required defaultValue={existingReview?.structure_rating ?? ""}><option value="">Select one</option><option value="strong_structure">Strong structure</option><option value="minor_improvements">Mostly clear, minor improvements needed</option><option value="needs_clearer_organisation">Needs clearer organisation</option><option value="significant_restructuring">Significant restructuring needed</option></select></label>
+      <label>Structure feedback<textarea name="structure_feedback" required minLength={120} defaultValue={existingReview?.structure_feedback ?? ""} placeholder="Identify any required sections that are missing, underdeveloped, or out of sequence. Explain what the author should add, move, or strengthen so the chapter follows the expected structure. Please write at least two sentences." /></label>
+      <label>Mission Integrity alignment<select name="mission_alignment_rating" required defaultValue={existingReview?.mission_alignment_rating ?? ""}><option value="">Select one</option><option value="strongly_aligned">Strongly aligned</option><option value="mostly_aligned">Mostly aligned</option><option value="partly_aligned">Partly aligned</option><option value="needs_clearer_alignment">Needs clearer alignment</option></select></label>
+      <label>Mission Integrity feedback<textarea name="mission_alignment_feedback" required minLength={120} defaultValue={existingReview?.mission_alignment_feedback ?? ""} placeholder="Explain how the chapter connects to mission, integrity, values-led leadership, or the wider purpose of the book. Describe where this connection is strongest and where it could be made clearer." /></label>
+      <label>Flow and reader journey<select name="flow_rating" required defaultValue={existingReview?.flow_rating ?? ""}><option value="">Select one</option><option value="very_clear">Very clear and easy to follow</option><option value="mostly_clear">Mostly clear</option><option value="needs_clearer_links">Some sections need clearer links</option><option value="difficult_to_follow">Difficult to follow</option></select></label>
+      <label>Flow feedback<textarea name="flow_feedback" required minLength={120} defaultValue={existingReview?.flow_feedback ?? ""} placeholder="Describe how the chapter moves from idea to idea. Identify any gaps, repetition, unclear transitions, or sections where the reader may need more guidance." /></label>
+      <label>Story, voice, and field experience<select name="story_rating" required defaultValue={existingReview?.story_rating ?? ""}><option value="">Select one</option><option value="strong_authentic_engaging">Strong, authentic, and engaging</option><option value="good_with_development">Good story with some development needed</option><option value="interesting_needs_detail">Interesting but needs more detail</option><option value="story_unclear">Story or lived experience is unclear</option></select></label>
+      <label>Story feedback<textarea name="story_feedback" required minLength={120} defaultValue={existingReview?.story_feedback ?? ""} placeholder="Explain how the chapter presents a real leadership story or field-based experience. Describe what makes the story authentic, useful, or engaging, and where the author could add more detail or clarity." /></label>
+      <label>Writing standard and accessibility<select name="writing_rating" required defaultValue={existingReview?.writing_rating ?? ""}><option value="">Select one</option><option value="clear_engaging_ready">Clear, engaging, and publication-ready</option><option value="minor_edits">Clear overall, with minor edits needed</option><option value="needs_editing">Understandable but needs editing</option><option value="significant_improvement">Needs significant improvement</option></select></label>
+      <label>Writing feedback<textarea name="writing_feedback" required minLength={120} defaultValue={existingReview?.writing_feedback ?? ""} placeholder="Describe the standard of the writing and how accessible it is for school leaders. Identify where the author should simplify, clarify, strengthen, or make the writing more engaging." /></label>
+      <label>Anonymity and contextual confidentiality<select name="anonymity_rating" required defaultValue={existingReview?.anonymity_rating ?? ""}><option value="">Select one</option><option value="no_concerns">No anonymity concerns identified</option><option value="minor_anonymising">Minor details may need anonymising</option><option value="several_details">Several contextual details need attention</option><option value="significant_concerns">Significant anonymity/confidentiality concerns</option></select></label>
+      <label>Anonymity feedback<textarea name="anonymity_feedback" required minLength={120} defaultValue={existingReview?.anonymity_feedback ?? ""} placeholder="Identify any names, roles, locations, institutional details, events, timelines, or contextual clues that could make people or places identifiable. Suggest what could be anonymised, softened, generalised, or removed while preserving the value of the story." /></label>
+      <label>Top three actions<textarea name="recommendations" required minLength={120} defaultValue={existingReview?.recommendations ?? ""} placeholder="List the top three actions the author should take next. Please make them specific and usable." /></label>
+      <label>Overall recommendation<select name="overall_recommendation" defaultValue={existingReview?.overall_recommendation ?? "revise_and_resubmit"}><option value="minor_revisions">Minor revisions</option><option value="revise_and_resubmit">Revise and strengthen</option><option value="major_revisions">Major revisions needed</option><option value="ready_for_editorial_review">Ready for editorial review</option></select></label>
+      <PeerReviewSubmitButton hasExistingReview={Boolean(existingReview)} />
+    </form>
   );
 }
 

@@ -159,8 +159,24 @@ textarea { min-height: 110px; resize: vertical; }
 .peer-review-guidance p { color: var(--muted); font-size: .9rem; line-height: 1.5; }
 .peer-assignment-list { display: grid; gap: 1rem; }
 .peer-assignment-card { border: 1px solid var(--line); border-radius: 8px; display: grid; gap: 1rem; padding: 1rem; }
+.peer-review-workspace { display: grid; gap: 1rem; grid-template-columns: minmax(240px, .45fr) minmax(0, 1.55fr); }
+.peer-review-queue { align-self: start; background: #fff; border: 1px solid var(--line); border-radius: 8px; display: grid; gap: .6rem; padding: .85rem; position: sticky; top: 1rem; }
+.peer-review-queue-item { background: #fff; border: 1px solid var(--line); display: grid; gap: .25rem; padding: .75rem; text-align: left; width: 100%; }
+.peer-review-queue-item.selected, .peer-review-queue-item:hover { background: #eef6fb; border-color: #c5d7e6; }
+.peer-review-queue-item span { color: var(--brand); font-size: .72rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.peer-review-queue-item strong { font-size: .92rem; line-height: 1.35; }
+.peer-review-queue-item small { width: fit-content; }
+.peer-reading-room { background: #fff; border: 1px solid var(--line); border-radius: 8px; display: grid; gap: 1rem; padding: 1rem; }
+.peer-reading-header { align-items: flex-start; display: flex; gap: 1rem; justify-content: space-between; }
+.peer-reading-header h3 { font-size: 1.15rem; line-height: 1.3; }
+.peer-reading-layout { align-items: start; display: grid; gap: 1rem; grid-template-columns: minmax(260px, .72fr) minmax(0, 1.28fr); }
+.peer-document-panel { display: grid; gap: .85rem; position: sticky; top: 1rem; }
+.review-helper-card { background: #f7fafc; border: 1px solid var(--line); border-radius: 8px; display: grid; gap: .45rem; padding: .85rem; }
+.review-helper-card p, .review-helper-card li { color: var(--muted); font-size: .9rem; line-height: 1.45; }
+.review-helper-card ul { margin: 0; padding-left: 1.15rem; }
 .compact-preview { min-height: auto; }
 .peer-review-form { display: grid; gap: .75rem; }
+.peer-reading-form { background: #f7fafc; border: 1px solid var(--line); border-radius: 8px; padding: .85rem; }
 .checklist-field { display: grid; gap: .65rem; }
 .check-row { align-items: flex-start; display: flex; gap: .55rem; margin-bottom: 0; }
 .check-row input { flex: 0 0 auto; margin-top: .2rem; width: auto; }
@@ -192,5 +208,5 @@ textarea { min-height: 110px; resize: vertical; }
 .agreement-table .table-row { grid-template-columns: 1.3fr .8fr .9fr .65fr .55fr; }
 .notice { background: #e7f6ee; border: 1px solid #b7dfc7; border-radius: 7px; color: var(--good); font-size: .9rem; font-weight: 700; margin-top: .85rem; padding: .75rem; }
 .timeline ol { color: var(--muted); margin: 0; padding-left: 1.25rem; }
-@media (max-width: 1180px) { .workspace, .admin-two-column { grid-template-columns: 1fr; } .sidebar { display: grid; gap: 1rem; grid-template-columns: 1fr 1fr; } .admin-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 760px) { main { padding: .75rem; } .topbar, .author-summary, .top-actions, .auth-box, .submission-card-header, .file-row, .peer-admin-actions form, .project-switcher, .settings-heading-row { align-items: stretch; flex-direction: column; } .project-switcher select { min-width: 0; } .role-switch { width: 100%; } .role-switch button { flex: 1; } .sidebar, .author-grid, .call-grid, .form-grid, .guidance-grid, .proposal-form-grid, .date-strip, .second-call-panel, .admin-metrics, .agreement-section-list { grid-template-columns: 1fr; } .admin-tabs button { flex-basis: 100%; } .admin-page .table-row { min-width: 760px; } }
+@media (max-width: 1180px) { .workspace, .admin-two-column, .peer-review-workspace, .peer-reading-layout { grid-template-columns: 1fr; } .sidebar { display: grid; gap: 1rem; grid-template-columns: 1fr 1fr; } .admin-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } .peer-review-queue, .peer-document-panel { position: static; } }
+@media (max-width: 760px) { main { padding: .75rem; } .topbar, .author-summary, .top-actions, .auth-box, .submission-card-header, .file-row, .peer-admin-actions form, .project-switcher, .settings-heading-row, .peer-reading-header { align-items: stretch; flex-direction: column; } .project-switcher select { min-width: 0; } .role-switch { width: 100%; } .role-switch button { flex: 1; } .sidebar, .author-grid, .call-grid, .form-grid, .guidance-grid, .proposal-form-grid, .date-strip, .second-call-panel, .admin-metrics, .agreement-section-list { grid-template-columns: 1fr; } .admin-tabs button { flex-basis: 100%; } .admin-page .table-row { min-width: 760px; } }
