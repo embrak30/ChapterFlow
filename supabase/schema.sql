@@ -98,6 +98,20 @@ create table if not exists public.submission_files (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.peer_review_files (
+  id uuid primary key default gen_random_uuid(),
+  book_id uuid not null references public.books(id) on delete cascade,
+  chapter_id uuid not null references public.chapters(id) on delete cascade,
+  uploaded_by uuid references public.profiles(id) on delete set null,
+  storage_path text not null,
+  file_name text not null,
+  content_type text,
+  byte_size bigint,
+  status text not null default 'approved',
+  notes text,
+  created_at timestamptz not null default now()
+);
+
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values (
   'chapter-drafts',
@@ -273,6 +287,7 @@ alter table public.books enable row level security;
 alter table public.chapters enable row level security;
 alter table public.submissions enable row level security;
 alter table public.submission_files enable row level security;
+alter table public.peer_review_files enable row level security;
 alter table public.reviews enable row level security;
 alter table public.email_logs enable row level security;
 alter table public.facilitator_books enable row level security;
@@ -398,6 +413,15 @@ create policy "Peer reviewers can view assigned submission files" on public.subm
     where s.id = submission_files.submission_id
       and public.is_peer_reviewer_for(s.chapter_id)
   )
+);
+drop policy if exists "Admins can manage peer review files" on public.peer_review_files;
+create policy "Admins can manage peer review files" on public.peer_review_files using (public.is_admin()) with check (public.is_admin());
+drop policy if exists "Facilitators can read peer review files" on public.peer_review_files;
+create policy "Facilitators can read peer review files" on public.peer_review_files for select using (public.is_facilitator_for(book_id) or public.is_facilitator());
+drop policy if exists "Peer reviewers can read approved peer review files" on public.peer_review_files;
+create policy "Peer reviewers can read approved peer review files" on public.peer_review_files for select using (
+  status = 'approved'
+  and public.is_peer_reviewer_for(chapter_id)
 );
 drop policy if exists "Admins can manage reviews" on public.reviews;
 create policy "Admins can manage reviews" on public.reviews using (public.is_admin());

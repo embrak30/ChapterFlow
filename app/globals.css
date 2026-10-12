@@ -184,6 +184,8 @@ textarea { min-height: 110px; resize: vertical; }
 .peer-admin { gap: 1rem; }
 .peer-admin form { display: grid; gap: .65rem; }
 .peer-admin form label { margin-bottom: 0; }
+.peer-prep-grid { display: grid; gap: 1rem; grid-template-columns: minmax(260px, .8fr) minmax(0, 1.2fr); }
+.peer-review-copy-form { background: #fff; border: 1px solid var(--line); border-radius: 8px; display: grid; gap: .8rem; padding: .85rem; }
 .peer-admin-actions { display: grid; gap: .75rem; }
 .peer-admin-actions form { display: flex; flex-wrap: wrap; gap: .55rem; }
 .warning-box { background: #fff8e8; border: 1px solid #f2c46d; border-radius: 8px; display: grid; flex-basis: 100%; gap: .45rem; padding: .75rem; }
@@ -208,5 +210,5 @@ textarea { min-height: 110px; resize: vertical; }
 .agreement-table .table-row { grid-template-columns: 1.3fr .8fr .9fr .65fr .55fr; }
 .notice { background: #e7f6ee; border: 1px solid #b7dfc7; border-radius: 7px; color: var(--good); font-size: .9rem; font-weight: 700; margin-top: .85rem; padding: .75rem; }
 .timeline ol { color: var(--muted); margin: 0; padding-left: 1.25rem; }
-@media (max-width: 1180px) { .workspace, .admin-two-column, .peer-review-workspace, .peer-reading-layout { grid-template-columns: 1fr; } .sidebar { display: grid; gap: 1rem; grid-template-columns: 1fr 1fr; } .admin-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } .peer-review-queue, .peer-document-panel { position: static; } }
+@media (max-width: 1180px) { .workspace, .admin-two-column, .peer-review-workspace, .peer-reading-layout, .peer-prep-grid { grid-template-columns: 1fr; } .sidebar { display: grid; gap: 1rem; grid-template-columns: 1fr 1fr; } .admin-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } .peer-review-queue, .peer-document-panel { position: static; } }
 @media (max-width: 760px) { main { padding: .75rem; } .topbar, .author-summary, .top-actions, .auth-box, .submission-card-header, .file-row, .peer-admin-actions form, .project-switcher, .settings-heading-row, .peer-reading-header { align-items: stretch; flex-direction: column; } .project-switcher select { min-width: 0; } .role-switch { width: 100%; } .role-switch button { flex: 1; } .sidebar, .author-grid, .call-grid, .form-grid, .guidance-grid, .proposal-form-grid, .date-strip, .second-call-panel, .admin-metrics, .agreement-section-list { grid-template-columns: 1fr; } .admin-tabs button { flex-basis: 100%; } .admin-page .table-row { min-width: 760px; } }

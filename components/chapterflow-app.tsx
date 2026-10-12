@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useFormStatus } from "react-dom";
-import { acceptAuthorAgreement, adminUploadDraftManuscript, generatePeerReviewAssignments, resetPeerReviewProcess, reviewProposal, saveCallSettings, savePeerReviewSettings, saveProjectAgreement, sendBulkAuthorEmail, sendPeerReviewFeedbackPacket, sendPeerReviewReminders, submitPeerReview, submitProposal, uploadDraftManuscript } from "@/app/actions";
+import { acceptAuthorAgreement, adminUploadDraftManuscript, generatePeerReviewAssignments, resetPeerReviewProcess, reviewProposal, saveCallSettings, savePeerReviewSettings, saveProjectAgreement, sendBulkAuthorEmail, sendPeerReviewFeedbackPacket, sendPeerReviewReminders, submitPeerReview, submitProposal, uploadAnonymisedReviewCopy, uploadDraftManuscript } from "@/app/actions";
 import { AuthButtons } from "@/components/auth-buttons";
 import { workflowStages } from "@/lib/sample-data";
 
@@ -44,6 +44,19 @@ type SubmissionFileRecord = {
   created_at: string;
 };
 
+type PeerReviewFileRecord = {
+  id: string;
+  book_id: string;
+  chapter_id: string;
+  storage_path: string;
+  file_name: string;
+  content_type: string | null;
+  byte_size: number | null;
+  status: string;
+  notes: string | null;
+  created_at: string;
+};
+
 type ReviewRecord = {
   id: string;
   decision: string;
@@ -63,6 +76,7 @@ type ChapterRecord = {
   created_at: string;
   profiles?: { full_name: string | null; email: string | null } | null;
   submissions?: SubmissionRecord[];
+  peer_review_files?: PeerReviewFileRecord[];
   reviews?: ReviewRecord[];
 };
 
@@ -319,6 +333,17 @@ function latestDraftSubmission(chapter?: ChapterRecord | null) {
 function fileHref(file: SubmissionFileRecord) {
   if (file.storage_path.startsWith("http://") || file.storage_path.startsWith("https://")) return file.storage_path;
   return `/api/submission-files/${file.id}`;
+}
+
+function peerReviewFileHref(file: PeerReviewFileRecord) {
+  if (file.storage_path.startsWith("http://") || file.storage_path.startsWith("https://")) return file.storage_path;
+  return `/api/peer-review-files/${file.id}`;
+}
+
+function latestApprovedReviewCopy(chapter?: ChapterRecord | null) {
+  return [...(chapter?.peer_review_files ?? [])]
+    .filter((file) => file.status === "approved")
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
 }
 
 function displayChoice(value?: string | null) {
@@ -894,8 +919,7 @@ function PeerReviewAssignmentSummary({
 function PeerReviewReadingRoom({ assignment, index }: { assignment: PeerReviewAssignmentRecord; index: number }) {
   const chapter = singleRecord(assignment.chapter);
   const existingReview = assignment.peer_reviews?.[0];
-  const draftSubmission = latestDraftSubmission(chapter);
-  const draftFiles = draftSubmission?.submission_files ?? [];
+  const approvedReviewCopy = latestApprovedReviewCopy(chapter);
 
   return (
     <article className="peer-reading-room">
@@ -911,22 +935,16 @@ function PeerReviewReadingRoom({ assignment, index }: { assignment: PeerReviewAs
         <section className="peer-document-panel">
           <div className="document-preview compact-preview">
             <span>Anonymised draft for review</span>
-            {draftFiles.length ? (
+            {approvedReviewCopy ? (
               <>
-                <p className="muted">Open the draft in a separate tab so you can read the full chapter while keeping this review form available. If the document reveals identifying details, note that in the anonymity section.</p>
-                <div className="file-list">
-                  {draftFiles.map((file) => {
-                    return (
-                      <div className="file-row" key={file.id}>
-                        <span>{file.file_name}</span>
-                        <a className="button-link" href={fileHref(file)} target="_blank" rel="noreferrer">Open draft</a>
-                      </div>
-                    );
-                  })}
+                <p className="muted">Open the anonymised review copy in a separate tab so you can read the full chapter while keeping this review form available. If the document still reveals identifying details, note that in the anonymity section.</p>
+                <div className="file-row">
+                  <span>{approvedReviewCopy.file_name}</span>
+                  <a className="button-link" href={peerReviewFileHref(approvedReviewCopy)} target="_blank" rel="noreferrer">Open anonymised copy</a>
                 </div>
               </>
             ) : (
-              <p>{draftSubmission?.abstract || chapter?.abstract || chapter?.proposal_outline || "No draft file is attached yet. Use the chapter information available here until the editor adds the draft file."}</p>
+              <p>No approved anonymised review copy is attached yet. Please contact the editorial team before starting this review.</p>
             )}
           </div>
           <div className="review-helper-card">
@@ -1203,7 +1221,8 @@ function PeerReviewAdminPanel({
   const selectedChapter = chapters.find((chapter) => chapter.id === selectedChapterId) ?? chapters[0];
   const selectedAssignments = selectedChapter ? assignments.filter((assignment) => assignment.chapter_id === selectedChapter.id) : [];
   const incompleteAssignments = assignments.filter((assignment) => !assignment.peer_reviews?.length && assignment.status !== "completed");
-  const canGenerate = chapters.length >= requiredReviewCount + 1;
+  const chaptersMissingReviewCopies = chapters.filter((chapter) => !latestApprovedReviewCopy(chapter));
+  const canGenerate = chapters.length >= requiredReviewCount + 1 && !chaptersMissingReviewCopies.length;
 
   return (
     <div className="admin-tools peer-admin">
@@ -1219,6 +1238,21 @@ function PeerReviewAdminPanel({
         <label>Reviewer guidance<textarea name="instructions" defaultValue={settings?.instructions ?? "Please provide constructive, specific feedback on structure, alignment with Mission Integrity, clarity of the story, practical value for other leaders, and light use of evidence."} /></label>
         <button className="primary" type="submit">Save peer review settings</button>
       </form>
+      <div className="peer-prep-grid">
+        <div className="peer-coverage-list">
+          <strong>Anonymised review copy preparation</strong>
+          {chapters.length ? chapters.map((chapter) => {
+            const reviewCopy = latestApprovedReviewCopy(chapter);
+            return (
+              <button className={`peer-coverage-row ${selectedChapter?.id === chapter.id ? "selected" : ""}`} key={chapter.id} onClick={() => setSelectedChapterId(chapter.id)} type="button">
+                <span>{chapter.title}</span>
+                <small>{reviewCopy ? `Ready for blind review · ${reviewCopy.file_name}` : "Needs anonymised review copy"}</small>
+              </button>
+            );
+          }) : <p className="muted">Approved chapters will appear here when they are ready for peer review preparation.</p>}
+        </div>
+        {selectedChapter ? <AnonymisedReviewCopyForm book={book} chapter={selectedChapter} /> : null}
+      </div>
       <div className="peer-admin-actions">
         <form
           action={generatePeerReviewAssignments}
@@ -1234,7 +1268,7 @@ function PeerReviewAdminPanel({
           <input type="hidden" name="book_id" value={book.id} />
           <div className="warning-box">
             <strong>Before generating assignments</strong>
-            <p>Only continue when you are ready for the peer review matrix to be created. The email option sends reviewer assignment emails immediately.</p>
+            <p>Only continue when every chapter has an approved anonymised review copy. The email option sends reviewer assignment emails immediately.</p>
             <label className="check-row">
               <input type="checkbox" checked={assignmentConfirmed} onChange={(event) => setAssignmentConfirmed(event.target.checked)} />
               <span>I understand and want to generate peer review assignments.</span>
@@ -1243,7 +1277,8 @@ function PeerReviewAdminPanel({
           <button disabled={!canGenerate || !assignmentConfirmed} type="submit" name="_action" value="save">Generate assignments</button>
           <button className="primary" disabled={!canGenerate || !assignmentConfirmed} type="submit" name="_action" value="notify">Generate and email reviewers</button>
         </form>
-        {!canGenerate ? <p className="muted">At least {requiredReviewCount + 1} approved chapters are needed for blind peer review without self-review.</p> : null}
+        {chapters.length < requiredReviewCount + 1 ? <p className="muted">At least {requiredReviewCount + 1} approved chapters are needed for blind peer review without self-review.</p> : null}
+        {chaptersMissingReviewCopies.length ? <p className="muted">Missing anonymised review copies: {chaptersMissingReviewCopies.map((chapter) => chapter.title).join(", ")}.</p> : null}
         <form action={sendPeerReviewReminders}>
           <input type="hidden" name="book_id" value={book.id} />
           <button disabled={!incompleteAssignments.length} type="submit">Send late review reminders</button>
@@ -1270,6 +1305,39 @@ function PeerReviewAdminPanel({
         <p>The reminder asks reviewers to complete outstanding reviews, names the assigned chapter, repeats the deadline, and invites them to contact the editorial team if there is a problem.</p>
       </div>
     </div>
+  );
+}
+
+function AnonymisedReviewCopyForm({ book, chapter }: { book: BookRecord; chapter: ChapterRecord }) {
+  const reviewCopy = latestApprovedReviewCopy(chapter);
+  const originalDraft = latestDraftSubmission(chapter);
+
+  return (
+    <form action={uploadAnonymisedReviewCopy} className="peer-review-copy-form">
+      <input type="hidden" name="book_id" value={book.id} />
+      <input type="hidden" name="chapter_id" value={chapter.id} />
+      <div>
+        <h3>Review copy for blind peer review</h3>
+        <p className="muted">Upload the checked anonymised Word copy. Reviewers will see this file only, not the original author draft.</p>
+      </div>
+      {originalDraft?.submission_files?.length ? (
+        <div className="file-list">
+          <strong>Original draft available to admin</strong>
+          {originalDraft.submission_files.map((file) => (
+            <div className="file-row" key={file.id}>
+              <span>{file.file_name}</span>
+              <a className="button-link" href={fileHref(file)} target="_blank" rel="noreferrer">Open original</a>
+            </div>
+          ))}
+        </div>
+      ) : <p className="muted">No original draft file has been uploaded for this chapter yet.</p>}
+      {reviewCopy ? (
+        <div className="notice">Approved review copy: <a href={peerReviewFileHref(reviewCopy)} target="_blank" rel="noreferrer">{reviewCopy.file_name}</a></div>
+      ) : null}
+      <label>Anonymised Word review copy<input name="manuscript" type="file" accept=".doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" required /></label>
+      <label>Editor anonymisation notes<textarea name="notes" placeholder="Optional: record what was removed, softened, or checked before approval." /></label>
+      <button className="primary" type="submit">{reviewCopy ? "Replace approved review copy" : "Upload approved anonymised copy"}</button>
+    </form>
   );
 }
 

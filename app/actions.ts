@@ -510,6 +510,65 @@ export async function adminUploadDraftManuscript(formData: FormData) {
   revalidatePath("/");
 }
 
+export async function uploadAnonymisedReviewCopy(formData: FormData) {
+  const { supabase, user, profile } = await getSignedInProfile();
+
+  if (!["admin", "editor"].includes(String(profile.role))) {
+    throw new Error("Only an administrator can upload an anonymised review copy.");
+  }
+
+  const bookId = textValue(formData, "book_id");
+  const chapterId = textValue(formData, "chapter_id");
+  const notes = textValue(formData, "notes");
+  const { file, fileName } = getDraftFile(formData);
+
+  if (!bookId || !chapterId) {
+    throw new Error("ChapterFlow could not identify the chapter for this review copy.");
+  }
+
+  const { data: chapter, error: chapterError } = await supabase
+    .from("chapters")
+    .select("id")
+    .eq("id", chapterId)
+    .eq("book_id", bookId)
+    .single();
+
+  if (chapterError || !chapter) {
+    throw new Error("This chapter could not be found.");
+  }
+
+  const safeFileName = fileName.replace(/[^a-zA-Z0-9._-]/g, "-");
+  const storagePath = `${bookId}/${chapterId}/peer-review/${Date.now()}-${safeFileName}`;
+  const { error: uploadError } = await supabase.storage
+    .from("chapter-drafts")
+    .upload(storagePath, file, {
+      contentType: file.type || "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      upsert: false
+    });
+
+  if (uploadError) {
+    throw new Error(uploadError.message);
+  }
+
+  const { error: fileError } = await supabase.from("peer_review_files").insert({
+    book_id: bookId,
+    chapter_id: chapterId,
+    uploaded_by: user.id,
+    storage_path: storagePath,
+    file_name: fileName,
+    content_type: file.type || null,
+    byte_size: file.size,
+    status: "approved",
+    notes
+  });
+
+  if (fileError) {
+    throw new Error(fileError.message);
+  }
+
+  revalidatePath("/");
+}
+
 export async function reviewProposal(formData: FormData) {
   const { supabase, user, profile } = await getSignedInProfile();
   const role = String(profile.role);
@@ -869,7 +928,7 @@ export async function generatePeerReviewAssignments(formData: FormData) {
     .maybeSingle();
   const { data: chapters, error: chapterError } = await supabase
     .from("chapters")
-    .select("id, title, author_id, profiles:author_id(full_name, email)")
+    .select("id, title, author_id, profiles:author_id(full_name, email), peer_review_files(id, status)")
     .eq("book_id", bookId)
     .in("status", ["approved", "submitted", "complete"])
     .order("created_at", { ascending: true });
@@ -884,6 +943,15 @@ export async function generatePeerReviewAssignments(formData: FormData) {
 
   if (eligibleChapters.length < requiredReviewCount + 1) {
     throw new Error(`At least ${requiredReviewCount + 1} approved chapters are needed so each author can review ${requiredReviewCount} chapters without reviewing their own.`);
+  }
+
+  const chaptersWithoutReviewCopies = eligibleChapters.filter((chapter) => {
+    const files = Array.isArray(chapter.peer_review_files) ? chapter.peer_review_files : [];
+    return !files.some((file) => file.status === "approved");
+  });
+
+  if (chaptersWithoutReviewCopies.length) {
+    throw new Error(`Upload and approve anonymised review copies before generating assignments. Missing: ${chaptersWithoutReviewCopies.map((chapter) => chapter.title).join(", ")}`);
   }
 
   await supabase.from("peer_review_assignments").delete().eq("book_id", bookId);
