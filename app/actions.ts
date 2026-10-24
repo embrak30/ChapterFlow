@@ -753,7 +753,7 @@ export async function sendBulkAuthorEmail(formData: FormData) {
 
   const { data: chapters, error: chaptersError } = await supabase
     .from("chapters")
-    .select("id, title, status, stage, current_deadline, profiles:author_id(full_name, email)")
+    .select("id, title, status, stage, current_deadline, profiles:author_id(full_name, email), submissions(stage, submission_files(id))")
     .eq("book_id", bookId)
     .order("created_at", { ascending: true });
 
@@ -763,6 +763,10 @@ export async function sendBulkAuthorEmail(formData: FormData) {
 
   const recipients = (chapters ?? [])
     .filter((chapter) => {
+      if (audience === "awaiting_first_draft" || emailTemplateName === "One week to go - first draft not submitted") {
+        const hasDraft = (chapter.submissions ?? []).some((submission) => submission.stage.includes("draft") && (submission.submission_files ?? []).length > 0);
+        return chapter.status === "approved" && chapter.stage === "first_draft" && !hasDraft;
+      }
       if (audience === "first_drafts") return chapter.stage === "first_draft" || chapter.status === "submitted";
       if (audience === "all_proposals") return chapter.status !== "rejected";
       return chapter.status === "approved" || chapter.status === "submitted" || chapter.status === "complete" || !String(chapter.stage).includes("proposal");

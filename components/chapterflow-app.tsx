@@ -215,6 +215,12 @@ const reviewEmailTemplates = [
       "This is a reminder that the author meeting for Mission Integrity will take place on October 11 at 8:00 a.m. UK time.\n\nGoogle Meet joining information:\nhttps://meet.google.com/ave-show-szf\n\nThe meeting will last approximately 45 minutes. We will use the time to:\n- Bring authors together as we move into the next stage of the writing process.\n- Check where everyone is with their chapter development.\n- Clarify expectations for the draft chapter.\n- Discuss the structure and tone of the chapters.\n- Offer support for authors who are still shaping their ideas.\n- Explain the next steps in the editorial and review process.\n- Introduce or reconnect with the editorial team.\n\nThe purpose of the meeting is to help everyone stay on track, make sure we are aligned, and answer any questions authors may have at this stage.\n\nPlease do your best to attend. If you have any questions before the meeting, feel free to get in touch."
   },
   {
+    id: "one-week-first-draft-reminder",
+    label: "One week to go - first draft not submitted",
+    subject: "One week to go: your chapter for {{book_title}}",
+    body: "There is just one week to go until the first draft deadline for your chapter, \"{{chapter_title}}\", for {{book_title}}. Please upload your manuscript through your ChapterFlow author dashboard by {{next_deadline}}.\n\nSubmission checklist:\n- Upload a Microsoft Word document (.docx).\n- Aim for 5,000 to 7,000 words, excluding references.\n- Use Times New Roman, 12 point, 1.5 line spacing and standard margins.\n- Include a chapter overview, introduction to your leadership story, school context and rationale, what happened and what you learned, practical implications, concluding reflections and references.\n- Keep the writing clear, accessible and grounded in your lived leadership experience, drawing lightly on relevant research or leadership ideas.\n- Use APA 7th Edition for references.\n- Check personal and contextual anonymity, including details that could identify people or schools.\n- Include your author biography of 100 to 150 words and check your affiliation and contact details.\n\nThank you for the time and care you are putting into your chapter. We look forward to reading your draft. No reply is needed; please submit your manuscript through ChapterFlow."
+  },
+  {
     id: "first-draft-received",
     label: "First draft received - next steps after October 30",
     subject: "Thank you for submitting your first draft",
@@ -1138,6 +1144,8 @@ function ApprovedAuthorsPanel({ book, chapters }: { book: BookRecord; chapters: 
   const emailList = approvedAuthors.map((author) => author.email).join(", ");
   const mailtoHref = emailList ? `mailto:?bcc=${encodeURIComponent(emailList)}&subject=${encodeURIComponent("ChapterFlow update for approved authors")}` : "";
   const [bulkTemplateId, setBulkTemplateId] = useState("october-author-meeting");
+  const [bulkAudience, setBulkAudience] = useState("current_authors");
+  const isDraftReminder = bulkTemplateId === "one-week-first-draft-reminder";
   const selectedTemplate = reviewEmailTemplates.find((template) => template.id === bulkTemplateId) ?? reviewEmailTemplates[0];
 
   async function copyEmails() {
@@ -1179,7 +1187,7 @@ function ApprovedAuthorsPanel({ book, chapters }: { book: BookRecord; chapters: 
         <input type="hidden" name="email_subject" value={selectedTemplate.subject} />
         <input type="hidden" name="email_template_body" value={selectedTemplate.body} />
         <div className="form-grid">
-          <label>Audience<select name="audience" defaultValue="current_authors"><option value="current_authors">Current approved authors</option><option value="first_drafts">Authors with first drafts / draft stage</option><option value="all_proposals">All active proposal authors</option></select></label>
+          <label>Audience<select name="audience" value={isDraftReminder ? "awaiting_first_draft" : bulkAudience} onChange={(event) => setBulkAudience(event.target.value)}><option value="awaiting_first_draft">Approved authors who have not uploaded a draft</option>{!isDraftReminder ? <><option value="current_authors">Current approved authors</option><option value="first_drafts">Authors with first drafts / draft stage</option><option value="all_proposals">All active proposal authors</option></> : null}</select></label>
           <label>Email template<select value={bulkTemplateId} onChange={(event) => setBulkTemplateId(event.target.value)}>{reviewEmailTemplates.map((template) => <option key={template.id} value={template.id}>{template.label}</option>)}</select></label>
         </div>
         <label>Additional note<textarea name="additional_message" placeholder="Optional: add a short note to include beneath the selected template for every author." /></label>
