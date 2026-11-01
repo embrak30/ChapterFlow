@@ -100,12 +100,27 @@ async function getSignedInProfile() {
     throw new Error("Your contributor profile could not be found.");
   }
 
-  return { supabase, user, profile };
+  const { data: owner } = await supabase.rpc("is_admin");
+  const { data: memberships } = await supabase.from("project_members").select("role").eq("user_id", user.id);
+  const effectiveRole = owner ? "admin" : memberships?.some((member) => member.role === "admin") ? "editor" : "author";
+  return { supabase, user, profile: { ...profile, role: effectiveRole }, isSuperAdmin: Boolean(owner) };
 }
 
 function textValue(formData: FormData, key: string) {
   const value = formData.get(key);
   return typeof value === "string" ? value.trim() : "";
+}
+
+async function requireProjectEditor(supabase: Awaited<ReturnType<typeof createClient>>, formData: FormData) {
+  let bookId = textValue(formData, "book_id");
+  const chapterId = textValue(formData, "chapter_id");
+  if (chapterId) {
+    const { data: chapter } = await supabase.from("chapters").select("book_id").eq("id", chapterId).single();
+    if (!chapter || (bookId && chapter.book_id !== bookId)) throw new Error("This chapter is not in the selected project.");
+    bookId = chapter.book_id;
+  }
+  const { data: allowed } = bookId ? await supabase.rpc("can_edit_project", { b: bookId }) : await supabase.rpc("is_admin");
+  if (!allowed) throw new Error("You do not have editor access to this project.");
 }
 
 function optionalDate(formData: FormData, key: string) {
@@ -224,14 +239,17 @@ async function saveDraftUpload({
 }
 
 export async function saveCallSettings(formData: FormData) {
-  const { supabase, user, profile } = await getSignedInProfile();
+  const { supabase, user, profile, isSuperAdmin } = await getSignedInProfile();
 
   if (!["admin", "editor"].includes(String(profile.role))) {
     throw new Error("Only an administrator can edit the public call.");
   }
+  await requireProjectEditor(supabase, formData);
 
   const bookId = textValue(formData, "book_id");
+  if (!bookId && !isSuperAdmin) throw new Error("Only the platform owner can create projects.");
   const payload = {
+    project_type: textValue(formData, "project_type") === "magazine" ? "magazine" : "book",
     title: textValue(formData, "title") || "Untitled edited book",
     subtitle: textValue(formData, "subtitle") || "Call for chapter proposals",
     description: textValue(formData, "description"),
@@ -258,12 +276,43 @@ export async function saveCallSettings(formData: FormData) {
   revalidatePath("/");
 }
 
+export async function manageProjectMember(formData: FormData) {
+  const { supabase, isSuperAdmin } = await getSignedInProfile();
+  if (!isSuperAdmin) throw new Error("Only the platform owner can assign project teams.");
+  const bookId = textValue(formData, "book_id");
+  const email = textValue(formData, "email").toLowerCase();
+  const role = textValue(formData, "role");
+  if (!bookId || !["admin", "facilitator", "remove"].includes(role)) throw new Error("Choose a project role.");
+  const { data: person, error } = await supabase.from("profiles").select("id").ilike("email", email).single();
+  if (error || !person) throw new Error("Ask this person to sign in to ChapterFlow once, then assign them using their exact email.");
+  const result = role === "remove"
+    ? await supabase.from("project_members").delete().eq("book_id", bookId).eq("user_id", person.id)
+    : await supabase.from("project_members").upsert({ book_id: bookId, user_id: person.id, role }, { onConflict: "book_id,user_id" });
+  if (result.error) throw new Error(result.error.message);
+  revalidatePath("/");
+}
+
+export async function createMagazineIssue(formData: FormData) {
+  const { supabase } = await getSignedInProfile();
+  const bookId = textValue(formData, "book_id");
+  const { data: permitted } = await supabase.rpc("can_edit_project", { b: bookId });
+  if (!permitted) throw new Error("You cannot manage this magazine.");
+  const { data: project } = await supabase.from("books").select("project_type").eq("id", bookId).single();
+  if (project?.project_type !== "magazine") throw new Error("Select a magazine project.");
+  const title = textValue(formData, "title");
+  if (!title) throw new Error("Enter an issue title.");
+  const { error } = await supabase.from("magazine_issues").insert({ book_id: bookId, title, submission_deadline: optionalDate(formData, "submission_deadline") });
+  if (error) throw new Error(error.message);
+  revalidatePath("/");
+}
+
 export async function saveProjectAgreement(formData: FormData) {
   const { supabase, user, profile } = await getSignedInProfile();
 
   if (!["admin", "editor"].includes(String(profile.role))) {
     throw new Error("Only an administrator can edit the author agreement.");
   }
+  await requireProjectEditor(supabase, formData);
 
   const bookId = textValue(formData, "book_id");
   const agreementId = textValue(formData, "agreement_id");
@@ -378,6 +427,12 @@ export async function submitProposal(formData: FormData) {
   const abstract = textValue(formData, "abstract");
   const proposalOutline = textValue(formData, "proposal_outline");
   const biography = textValue(formData, "biography");
+  const issueId = textValue(formData, "issue_id");
+  const { data: projectType } = await supabase.from("books").select("project_type").eq("id", bookId).single();
+  if (projectType?.project_type === "magazine") {
+    const { data: issue } = await supabase.from("magazine_issues").select("id").eq("id", issueId).eq("book_id", bookId).single();
+    if (!issue) throw new Error("Choose an issue belonging to this magazine.");
+  }
 
   if (!bookId || !title || !proposalOutline) {
     throw new Error("Please add a chapter title and story proposal before submitting.");
@@ -388,14 +443,16 @@ export async function submitProposal(formData: FormData) {
   }
 
   const { data: book } = await supabase.from("books").select("proposal_deadline").eq("id", bookId).maybeSingle();
-  const { data: existingChapter } = await supabase
+  const existingQuery = supabase
     .from("chapters")
     .select("id, status")
     .eq("book_id", bookId)
-    .eq("author_id", user.id)
-    .maybeSingle();
+    .eq("author_id", user.id);
+  const { data: existingChapter, error: existingError } = await (issueId ? existingQuery.eq("issue_id", issueId) : existingQuery.is("issue_id", null)).maybeSingle();
+  if (existingError) throw new Error(existingError.message);
 
   const chapterPayload = {
+    issue_id: issueId || null,
     book_id: bookId,
     author_id: user.id,
     title,
@@ -475,6 +532,7 @@ export async function adminUploadDraftManuscript(formData: FormData) {
   if (!["admin", "editor"].includes(String(profile.role))) {
     throw new Error("Only an administrator can upload a draft for an author.");
   }
+  await requireProjectEditor(supabase, formData);
 
   const bookId = textValue(formData, "book_id");
   const chapterId = textValue(formData, "chapter_id");
@@ -516,6 +574,7 @@ export async function uploadAnonymisedReviewCopy(formData: FormData) {
   if (!["admin", "editor"].includes(String(profile.role))) {
     throw new Error("Only an administrator can upload an anonymised review copy.");
   }
+  await requireProjectEditor(supabase, formData);
 
   const bookId = textValue(formData, "book_id");
   const chapterId = textValue(formData, "chapter_id");
@@ -576,6 +635,7 @@ export async function reviewProposal(formData: FormData) {
   if (!["admin", "editor"].includes(role)) {
     throw new Error("Only administrators can review proposals and send decisions.");
   }
+  await requireProjectEditor(supabase, formData);
 
   const chapterId = textValue(formData, "chapter_id");
   const bookId = textValue(formData, "book_id");
@@ -725,6 +785,7 @@ export async function sendBulkAuthorEmail(formData: FormData) {
   if (!["admin", "editor"].includes(String(profile.role))) {
     throw new Error("Only an administrator can send bulk author emails.");
   }
+  await requireProjectEditor(supabase, formData);
 
   const bookId = textValue(formData, "book_id");
   const audience = textValue(formData, "audience") || "current_authors";
@@ -860,6 +921,7 @@ export async function savePeerReviewSettings(formData: FormData) {
   if (!["admin", "editor"].includes(String(profile.role))) {
     throw new Error("Only an administrator can open or edit peer review.");
   }
+  await requireProjectEditor(supabase, formData);
 
   const bookId = textValue(formData, "book_id");
   const isOpen = textValue(formData, "is_open") === "open";
@@ -898,6 +960,7 @@ export async function generatePeerReviewAssignments(formData: FormData) {
   if (!["admin", "editor"].includes(String(profile.role))) {
     throw new Error("Only an administrator can create peer review assignments.");
   }
+  await requireProjectEditor(supabase, formData);
 
   const bookId = textValue(formData, "book_id");
   const shouldNotify = textValue(formData, "_action") === "notify";
@@ -1029,6 +1092,7 @@ export async function resetPeerReviewProcess(formData: FormData) {
   if (!["admin", "editor"].includes(String(profile.role))) {
     throw new Error("Only an administrator can reset peer review assignments.");
   }
+  await requireProjectEditor(supabase, formData);
 
   const bookId = textValue(formData, "book_id");
 
@@ -1163,6 +1227,7 @@ export async function sendPeerReviewFeedbackPacket(formData: FormData) {
   if (!["admin", "editor"].includes(String(profile.role))) {
     throw new Error("Only an administrator can send peer review feedback to authors.");
   }
+  await requireProjectEditor(supabase, formData);
 
   const chapterId = textValue(formData, "chapter_id");
   const includedReviewIds = formValues(formData, "included_review_ids");
@@ -1256,6 +1321,7 @@ export async function sendPeerReviewReminders(formData: FormData) {
   if (!["admin", "editor"].includes(String(profile.role))) {
     throw new Error("Only an administrator can send peer review reminders.");
   }
+  await requireProjectEditor(supabase, formData);
 
   const bookId = textValue(formData, "book_id");
 

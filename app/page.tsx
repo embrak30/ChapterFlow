@@ -65,12 +65,21 @@ export default async function Home() {
     .from("agreement_acceptances")
     .select("*, profiles:author_id(full_name, email), chapters:chapter_id(title)")
     .order("accepted_at", { ascending: false });
+  const { data: isSuperAdmin } = await supabase.rpc("is_admin");
+  const { data: projectMembers } = await supabase.from("project_members").select("book_id, user_id, role, profiles:user_id(full_name, email)");
+  const { data: magazineIssues } = await supabase.from("magazine_issues").select("*").order("created_at", { ascending: false });
+  const ownMemberships = (projectMembers ?? []).filter((member) => member.user_id === user?.id);
+  userRole = isSuperAdmin || ownMemberships.some((member) => member.role === "admin") ? "admin" : ownMemberships.some((member) => member.role === "facilitator") ? "facilitator" : user ? "author" : null;
 
   return (
     <ChapterFlowApp
       userEmail={user?.email}
       userName={profileName}
       userRole={userRole}
+      isSuperAdmin={Boolean(isSuperAdmin)}
+      userId={user?.id}
+      projectMembers={projectMembers ?? []}
+      magazineIssues={magazineIssues ?? []}
       books={books ?? []}
       chapters={chapters ?? []}
       peerReviewSettings={peerReviewSettings ?? []}

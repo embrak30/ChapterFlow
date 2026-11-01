@@ -5,8 +5,13 @@ import { useFormStatus } from "react-dom";
 import { acceptAuthorAgreement, adminUploadDraftManuscript, generatePeerReviewAssignments, resetPeerReviewProcess, reviewProposal, saveCallSettings, savePeerReviewSettings, saveProjectAgreement, sendBulkAuthorEmail, sendPeerReviewFeedbackPacket, sendPeerReviewReminders, submitPeerReview, submitProposal, uploadAnonymisedReviewCopy, uploadDraftManuscript } from "@/app/actions";
 import { AuthButtons } from "@/components/auth-buttons";
 import { workflowStages } from "@/lib/sample-data";
+import { manageProjectMember, createMagazineIssue } from "@/app/actions";
+
+type ProjectMember = { book_id: string; user_id: string; role: string; profiles: { full_name: string; email: string } | { full_name: string; email: string }[] | null };
+type MagazineIssue = { id: string; book_id: string; title: string; submission_deadline: string | null };
 
 type BookRecord = {
+  project_type?: string;
   id: string;
   title: string;
   subtitle: string | null;
@@ -65,6 +70,7 @@ type ReviewRecord = {
 };
 
 type ChapterRecord = {
+  issue_id?: string | null;
   id: string;
   book_id: string;
   title: string;
@@ -153,6 +159,10 @@ type AgreementAcceptanceRecord = {
 };
 
 type ChapterFlowAppProps = {
+  isSuperAdmin: boolean;
+  userId?: string;
+  projectMembers: ProjectMember[];
+  magazineIssues: MagazineIssue[];
   userEmail?: string | null;
   userName?: string | null;
   userRole?: "admin" | "facilitator" | "author" | null;
@@ -390,10 +400,10 @@ function formatPeerReviewForAuthor(review: PeerReviewRecord) {
   ].join("\n");
 }
 
-export function ChapterFlowApp({ userEmail, userName, userRole, books, chapters, peerReviewSettings, peerReviewAssignments, bookAgreements, agreementAcceptances }: ChapterFlowAppProps) {
+export function ChapterFlowApp({ userEmail, userName, userRole, books, chapters, peerReviewSettings, peerReviewAssignments, bookAgreements, agreementAcceptances, isSuperAdmin, userId, projectMembers, magazineIssues }: ChapterFlowAppProps) {
   const isSignedIn = Boolean(userEmail);
-  const canViewAdmin = userRole === "admin";
-  const canViewFacilitator = userRole === "facilitator" || canViewAdmin;
+  let canViewAdmin = userRole === "admin";
+  let canViewFacilitator = userRole === "facilitator" || canViewAdmin;
   const defaultView = !isSignedIn ? "public" : canViewAdmin ? "admin" : canViewFacilitator ? "facilitator" : "author";
   const [role, setRole] = useState<"public" | "admin" | "facilitator" | "author">(defaultView);
   const openBooks = books.filter((book) => book.public_status === "open");
@@ -406,6 +416,12 @@ export function ChapterFlowApp({ userEmail, userName, userRole, books, chapters,
   const visibleBooks = projectOptions.length ? projectOptions : books;
   const [selectedBookId, setSelectedBookId] = useState(visibleBooks[0]?.id ?? "");
   const selectedBook = visibleBooks.find((book) => book.id === selectedBookId) ?? visibleBooks[0] ?? fallbackBook;
+  const [selectedIssueId, setSelectedIssueId] = useState("");
+  const projectIssues = magazineIssues.filter((issue) => issue.book_id === selectedBook.id);
+  const selectedIssue = projectIssues.find((issue) => issue.id === selectedIssueId) ?? projectIssues[0];
+  const projectRole = projectMembers.find((member) => member.book_id === selectedBook.id && member.user_id === userId)?.role;
+  canViewAdmin = isSuperAdmin || projectRole === "admin";
+  canViewFacilitator = canViewAdmin || projectRole === "facilitator";
   const bookChapters = selectedBook.id ? chapters.filter((chapter) => chapter.book_id === selectedBook.id) : chapters;
   const selectedPeerReviewSettings = peerReviewSettings.find((settings) => settings.book_id === selectedBook.id);
   const selectedPeerReviewAssignments = selectedBook.id
@@ -416,7 +432,7 @@ export function ChapterFlowApp({ userEmail, userName, userRole, books, chapters,
     ? agreementAcceptances.filter((acceptance) => acceptance.book_id === selectedBook.id)
     : agreementAcceptances;
   const authorChapter = userEmail
-    ? bookChapters.find((chapter) => chapter.profiles?.email?.toLowerCase() === userEmail.toLowerCase())
+    ? bookChapters.find((chapter) => chapter.profiles?.email?.toLowerCase() === userEmail.toLowerCase() && (selectedBook.project_type !== "magazine" || chapter.issue_id === selectedIssue?.id))
     : undefined;
   const authorAgreementAcceptance = authorChapter
     ? selectedAgreementAcceptances.find((acceptance) => acceptance.chapter_id === authorChapter.id)
@@ -450,13 +466,17 @@ export function ChapterFlowApp({ userEmail, userName, userRole, books, chapters,
           <AuthButtons isSignedIn={isSignedIn} email={userEmail} />
         </div>
       </header>
+      {role === "author" && selectedBook.project_type === "magazine" ? <label className="panel admin-page">Magazine issue<select value={selectedIssue?.id ?? ""} onChange={(event) => setSelectedIssueId(event.target.value)}>{projectIssues.map((issue) => <option key={issue.id} value={issue.id}>{issue.title}</option>)}</select></label> : null}
+
+      {isSuperAdmin ? <section className="panel admin-page"><p className="eyebrow">Super admin</p><h2>Project team: {selectedBook.title}</h2><form action={manageProjectMember} className="form-grid"><input type="hidden" name="book_id" value={selectedBook.id} /><label>Team member email<input name="email" type="email" required /></label><label>Project access<select name="role"><option value="admin">Project admin / editor</option><option value="facilitator">Facilitator (read only)</option><option value="remove">Remove access</option></select></label><button type="submit">Save project access</button></form>{projectMembers.filter((member) => member.book_id === selectedBook.id).map((member) => <p key={member.user_id}>{singleRecord(member.profiles)?.email} — {member.role}</p>)}</section> : null}
+      {canViewAdmin && selectedBook.project_type === "magazine" ? <section className="panel admin-page"><h2>Magazine issues</h2><form action={createMagazineIssue} className="form-grid"><input type="hidden" name="book_id" value={selectedBook.id} /><label>Issue title<input name="title" required /></label><label>Submission deadline<input name="submission_deadline" type="date" /></label><button type="submit">Create issue</button></form>{magazineIssues.filter((issue) => issue.book_id === selectedBook.id).map((issue) => <p key={issue.id}>{issue.title} · {formatDate(issue.submission_deadline)}</p>)}</section> : null}
 
       {role === "admin" && canViewAdmin ? (
-        <AdminView book={selectedBook} books={books} chapters={bookChapters} stats={stats} peerReviewSettings={selectedPeerReviewSettings} peerReviewAssignments={selectedPeerReviewAssignments} agreement={selectedAgreement} agreementAcceptances={selectedAgreementAcceptances} />
+        <AdminView key={selectedBook.id} book={selectedBook} books={books} chapters={bookChapters} stats={stats} peerReviewSettings={selectedPeerReviewSettings} peerReviewAssignments={selectedPeerReviewAssignments} agreement={selectedAgreement} agreementAcceptances={selectedAgreementAcceptances} isSuperAdmin={isSuperAdmin} />
       ) : role === "facilitator" && canViewFacilitator ? (
         <FacilitatorView book={selectedBook} chapters={bookChapters} stats={stats} agreementAcceptances={selectedAgreementAcceptances} />
       ) : role === "author" && isSignedIn ? (
-        <AuthorView book={selectedBook} userName={userName} userEmail={userEmail} chapter={authorChapter} agreement={selectedAgreement} agreementAcceptance={authorAgreementAcceptance} peerReviewSettings={selectedPeerReviewSettings} peerReviewAssignments={selectedPeerReviewAssignments} />
+        <AuthorView key={`${selectedBook.id}-${selectedIssue?.id ?? ""}`} issues={selectedIssue ? [selectedIssue] : []} book={selectedBook} userName={userName} userEmail={userEmail} chapter={authorChapter} agreement={selectedAgreement} agreementAcceptance={authorAgreementAcceptance} peerReviewSettings={selectedPeerReviewSettings} peerReviewAssignments={selectedPeerReviewAssignments} />
       ) : (
         <PublicView book={selectedBook} isSignedIn={isSignedIn} />
       )}
@@ -472,7 +492,7 @@ function PublicView({ book, isSignedIn }: { book: BookRecord; isSignedIn: boolea
         <h2>{book.title}</h2>
         <p>{book.call_summary || book.description || "Create an account to view the call and submit your chapter proposal."}</p>
       </div>
-      <article className="panel second-call-panel">
+      {book.project_type !== "magazine" ? <article className="panel second-call-panel">
         <div className="second-call-copy">
           <p className="eyebrow">Third call now open</p>
           <h2>Final opportunity to submit a chapter proposal</h2>
@@ -491,7 +511,7 @@ function PublicView({ book, isSignedIn }: { book: BookRecord; isSignedIn: boolea
           src="/third-call-for-chapters-october-9.png"
           alt="Third Call for Chapters: Leadership With Mission Integrity. Deadline: October 9."
         />
-      </article>
+      </article> : <section className="panel"><h2>Submit an article</h2><p>{book.author_guidelines || "Sign in to submit your article idea. Your editor will provide feedback and guide your draft through revision and approval."}</p></section>}
       <article className="panel deadline-card">
         <div className="section-heading">
           <p className="eyebrow">Key dates</p>
@@ -500,7 +520,7 @@ function PublicView({ book, isSignedIn }: { book: BookRecord; isSignedIn: boolea
         <DeadlineStrip book={book} />
         <AuthPrompt isSignedIn={isSignedIn} />
       </article>
-      <AuthorGuidance />
+      {book.project_type !== "magazine" ? <AuthorGuidance /> : null}
     </section>
   );
 }
@@ -619,6 +639,7 @@ function AuthPrompt({ isSignedIn }: { isSignedIn: boolean }) {
 }
 
 function AuthorView({
+  issues,
   book,
   userName,
   userEmail,
@@ -628,6 +649,7 @@ function AuthorView({
   peerReviewSettings,
   peerReviewAssignments
 }: {
+  issues: MagazineIssue[];
   book: BookRecord;
   userName?: string | null;
   userEmail?: string | null;
@@ -664,13 +686,14 @@ function AuthorView({
         <section className="panel proposal-panel">
           <div className="section-heading">
             <p className="eyebrow">First stage</p>
-            <h2>Submit chapter proposal</h2>
+            <h2>{book.project_type === "magazine" ? "Submit article proposal" : "Submit chapter proposal"}</h2>
           </div>
           {proposalApproved ? (
-            <div className="notice">Your proposal is approved. The first draft stage is now open. File upload for Word manuscripts is the next build step.</div>
+            <div className="notice">Your proposal is approved. You can upload your Word manuscript below.</div>
           ) : (
             <form action={submitProposal}>
               <input type="hidden" name="book_id" value={book.id} />
+              {book.project_type === "magazine" ? <label>Magazine issue<select name="issue_id" required><option value="">Select an issue</option>{issues.map((issue) => <option value={issue.id} key={issue.id}>{issue.title}</option>)}</select></label> : null}
               <p className="muted">Submit your proposed chapter title and a short story-led summary. Draft manuscript upload will unlock after approval.</p>
               <div className="proposal-form-grid">
                 <label>Proposed chapter title<input name="title" required placeholder="Enter your proposed chapter title" defaultValue={chapter?.title ?? ""} /></label>
@@ -1023,7 +1046,8 @@ function AdminView({
   peerReviewSettings,
   peerReviewAssignments,
   agreement,
-  agreementAcceptances
+  agreementAcceptances,
+  isSuperAdmin
 }: {
   book: BookRecord;
   books: BookRecord[];
@@ -1033,6 +1057,7 @@ function AdminView({
   peerReviewAssignments: PeerReviewAssignmentRecord[];
   agreement?: BookAgreementRecord;
   agreementAcceptances: AgreementAcceptanceRecord[];
+  isSuperAdmin: boolean;
 }) {
   const approvedChapters = chapters.filter((chapter) => chapter.status === "approved" || !chapter.stage.includes("proposal"));
   const [adminTab, setAdminTab] = useState<"call" | "authors" | "proposals" | "peer-review" | "agreements" | "workflow">("proposals");
@@ -1068,7 +1093,7 @@ function AdminView({
         {adminTab === "peer-review" ? <PeerReviewAdminPanel book={book} chapters={approvedChapters} settings={peerReviewSettings} assignments={peerReviewAssignments} /> : null}
         {adminTab === "agreements" ? <AgreementAdminPanel book={book} chapters={approvedChapters} agreement={agreement} acceptances={agreementAcceptances} /> : null}
         {adminTab === "authors" ? <ApprovedAuthorsPanel book={book} chapters={approvedChapters} /> : null}
-        {adminTab === "call" ? <CallSettingsForm book={book.id ? book : undefined} hasBooks={books.length > 0} /> : null}
+        {adminTab === "call" ? <CallSettingsForm book={book.id ? book : undefined} hasBooks={books.length > 0} canCreate={isSuperAdmin} /> : null}
         {adminTab === "workflow" ? <WorkflowPanel book={book} stats={stats} /> : null}
       </div>
     </section>
@@ -1457,7 +1482,7 @@ function FacilitatorView({
   );
 }
 
-function CallSettingsForm({ book, hasBooks }: { book?: BookRecord; hasBooks: boolean }) {
+function CallSettingsForm({ book, hasBooks, canCreate }: { book?: BookRecord; hasBooks: boolean; canCreate: boolean }) {
   const [isCreatingProject, setIsCreatingProject] = useState(!hasBooks);
   const activeBook = isCreatingProject ? undefined : book;
 
@@ -1468,7 +1493,7 @@ function CallSettingsForm({ book, hasBooks }: { book?: BookRecord; hasBooks: boo
           <h3>{isCreatingProject ? "Create new project" : "Edit selected project"}</h3>
           <p className="muted">{isCreatingProject ? "Start a new book, call for chapters, proceedings, or edited volume inside ChapterFlow." : "You are editing the project currently selected in the top project dropdown."}</p>
         </div>
-        {hasBooks ? (
+        {hasBooks && canCreate ? (
           <div className="button-row">
             <button type="button" onClick={() => setIsCreatingProject(false)}>Edit selected project</button>
             <button className="primary" type="button" onClick={() => setIsCreatingProject(true)}>Create new project</button>
@@ -1476,6 +1501,7 @@ function CallSettingsForm({ book, hasBooks }: { book?: BookRecord; hasBooks: boo
         ) : null}
       </div>
       <input type="hidden" name="book_id" value={activeBook?.id ?? ""} />
+      <label>Project type<select name="project_type" defaultValue={activeBook?.project_type ?? "book"}><option value="book">Edited book</option><option value="magazine">Magazine</option></select></label>
       <label>Book / project title<input name="title" required defaultValue={activeBook?.title ?? ""} placeholder="Example: Leadership With Mission Integrity" /></label>
       <label>Short public welcome<textarea name="call_summary" defaultValue={activeBook?.call_summary ?? ""} placeholder="Welcome authors and explain the kind of story-led chapter you are inviting them to propose." /></label>
       <label>Chapter spaces<input name="chapter_spaces" defaultValue={activeBook?.chapter_spaces ?? ""} placeholder="Example: 12 chapters + 2 reserve spaces" /></label>
