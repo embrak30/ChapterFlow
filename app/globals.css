@@ -210,5 +210,43 @@ textarea { min-height: 110px; resize: vertical; }
 .agreement-table .table-row { grid-template-columns: 1.3fr .8fr .9fr .65fr .55fr; }
 .notice { background: #e7f6ee; border: 1px solid #b7dfc7; border-radius: 7px; color: var(--good); font-size: .9rem; font-weight: 700; margin-top: .85rem; padding: .75rem; }
 .timeline ol { color: var(--muted); margin: 0; padding-left: 1.25rem; }
+.author-view { gap: .65rem; }
+.author-summary { padding: .8rem 1rem; }
+.author-summary .eyebrow { margin-bottom: .2rem; }
+.author-summary p { font-size: .88rem; }
+.author-task-nav { display: flex; flex-wrap: wrap; gap: .4rem; }
+.author-task-nav button { flex: 1 1 150px; display: grid; gap: .25rem; text-align: left; padding: .65rem .8rem; min-width: 0; }
+.author-task-nav small { font-weight: 400; color: var(--muted); overflow-wrap: anywhere; }
+.author-task-nav button.active { background: #eef6fb; border-color: var(--brand); }
+.author-task-nav button:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.compact-author-grid { grid-template-columns: minmax(0, 1fr); gap: .65rem; }
+.compact-author-grid > .panel:not(.author-deadlines) { display: none; }
+.compact-author-grid[data-section="proposal"] > .proposal-panel,
+.compact-author-grid[data-section="draft"] > .draft-panel,
+.compact-author-grid[data-section="records"] > .submissions-panel,
+.compact-author-grid[data-section="agreement"] > .agreement-panel,
+.compact-author-grid[data-section="reviews"] > .peer-review-panel { display: grid; }
+.compact-author-grid .author-deadlines { grid-template-columns: auto minmax(0, 1fr); align-items: center; padding: .65rem .85rem; }
+.compact-author-grid .author-deadlines .section-heading { margin: 0; }
+.compact-author-grid .author-deadlines .eyebrow { display: none; }
+.compact-author-grid .date-strip span { padding: .45rem .65rem; font-size: .85rem; }
+.compact-author-grid .section-heading { margin-bottom: .6rem; }
+.compact-author-grid label { margin-bottom: .5rem; }
+.compact-author-grid .proposal-form-grid { gap: .65rem; }
+.compact-author-grid .proposal-form-grid textarea { min-height: 100px; }
+.compact-author-grid .empty-state { min-height: 100px; gap: .4rem; }
+.compact-author-grid .notice { margin-top: 0; }
+.admin-hero { gap: .65rem; padding: .8rem; }
+.admin-hero .stat-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .4rem; margin-bottom: 0; }
+.admin-hero .stat { padding: .55rem .7rem; }
+.admin-hero .stat strong { font-size: 1.2rem; }
+.admin-hero .admin-tabs button { padding: .55rem .7rem; }
+@media (max-width: 760px) {
+  .compact-author-grid .author-deadlines { grid-template-columns: 1fr; gap: .5rem; }
+  .compact-author-grid .date-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .3rem; }
+  .compact-author-grid .date-strip span { overflow-wrap: anywhere; }
+  .author-task-nav button { flex-basis: 130px; }
+  .admin-hero .stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 @media (max-width: 1180px) { .workspace, .admin-two-column, .peer-review-workspace, .peer-reading-layout, .peer-prep-grid { grid-template-columns: 1fr; } .sidebar { display: grid; gap: 1rem; grid-template-columns: 1fr 1fr; } .admin-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } .peer-review-queue, .peer-document-panel { position: static; } }
 @media (max-width: 760px) { main { padding: .75rem; } .topbar, .author-summary, .top-actions, .auth-box, .submission-card-header, .file-row, .peer-admin-actions form, .project-switcher, .settings-heading-row, .peer-reading-header { align-items: stretch; flex-direction: column; } .project-switcher select { min-width: 0; } .role-switch { width: 100%; } .role-switch button { flex: 1; } .sidebar, .author-grid, .call-grid, .form-grid, .guidance-grid, .proposal-form-grid, .date-strip, .second-call-panel, .admin-metrics, .agreement-section-list { grid-template-columns: 1fr; } .admin-tabs button { flex-basis: 100%; } .admin-page .table-row { min-width: 760px; } }

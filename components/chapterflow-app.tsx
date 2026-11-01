@@ -665,6 +665,14 @@ function AuthorView({
     (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   );
   const hasDraftFile = submissions.some((submission) => (submission.submission_files ?? []).length > 0);
+  const [authorTab, setAuthorTab] = useState(hasDraftFile ? "records" : proposalApproved ? "draft" : "proposal");
+  const authorTabs = [
+    { id: "proposal", label: "Proposal", detail: hasProposal ? displayStatus(chapter?.status ?? "pending_review") : "Not submitted" },
+    { id: "draft", label: "Draft upload", detail: hasDraftFile ? "Uploaded" : proposalApproved ? "Ready to upload" : "Awaiting approval" },
+    { id: "records", label: "Work & feedback", detail: `${submissions.length} submissions · ${chapter?.reviews?.length ?? 0} decisions` },
+    { id: "agreement", label: "Agreement", detail: agreementAcceptance ? "Signed" : agreement?.is_active && hasDraftFile ? "Action required" : "Not yet open" },
+    ...(peerReviewSettings?.is_open ? [{ id: "reviews", label: "Peer review", detail: "Open assignments" }] : [])
+  ];
   const reviewerAssignments = userEmail
     ? peerReviewAssignments.filter((assignment) => singleRecord(assignment.reviewer)?.email?.toLowerCase() === userEmail.toLowerCase())
     : [];
@@ -681,7 +689,10 @@ function AuthorView({
           {hasProposal ? displayStatus(chapter?.status ?? "pending_review") : "Proposal not submitted"}
         </span>
       </div>
-      <div className="author-grid">
+      <nav className="author-task-nav" aria-label="Author tasks">
+        {authorTabs.map((tab) => <button key={tab.id} type="button" aria-pressed={authorTab === tab.id} className={authorTab === tab.id ? "active" : ""} onClick={() => setAuthorTab(tab.id)}><strong>{tab.label}</strong><small>{tab.detail}</small></button>)}
+      </nav>
+      <div className="author-grid compact-author-grid" data-section={authorTab}>
         <section className="panel author-deadlines"><div className="section-heading"><p className="eyebrow">Project dates</p><h2>Deadlines</h2></div><DeadlineStrip book={book} /></section>
         <section className="panel proposal-panel">
           <div className="section-heading">
@@ -689,7 +700,7 @@ function AuthorView({
             <h2>{book.project_type === "magazine" ? "Submit article proposal" : "Submit chapter proposal"}</h2>
           </div>
           {proposalApproved ? (
-            <div className="notice">Your proposal is approved. You can upload your Word manuscript below.</div>
+            <div className="notice">Your proposal is approved. <button type="button" onClick={() => setAuthorTab("draft")}>Open draft upload</button></div>
           ) : (
             <form action={submitProposal}>
               <input type="hidden" name="book_id" value={book.id} />
@@ -729,6 +740,7 @@ function AuthorView({
             <h2>Submitted work and feedback</h2>
             <p className="muted">This is the work ChapterFlow currently has recorded against your author profile.</p>
           </div>
+          <ReviewHistory reviews={chapter?.reviews ?? []} />
           {submissions.length ? (
             <div className="submission-list">
               {submissions.map((submission) => (
