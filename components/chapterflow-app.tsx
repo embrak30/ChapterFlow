@@ -215,6 +215,12 @@ const reviewEmailTemplates = [
       "This is a reminder that the author meeting for Mission Integrity will take place on October 11 at 8:00 a.m. UK time.\n\nGoogle Meet joining information:\nhttps://meet.google.com/ave-show-szf\n\nThe meeting will last approximately 45 minutes. We will use the time to:\n- Bring authors together as we move into the next stage of the writing process.\n- Check where everyone is with their chapter development.\n- Clarify expectations for the draft chapter.\n- Discuss the structure and tone of the chapters.\n- Offer support for authors who are still shaping their ideas.\n- Explain the next steps in the editorial and review process.\n- Introduce or reconnect with the editorial team.\n\nThe purpose of the meeting is to help everyone stay on track, make sure we are aligned, and answer any questions authors may have at this stage.\n\nPlease do your best to attend. If you have any questions before the meeting, feel free to get in touch."
   },
   {
+    id: "first-draft-extension",
+    label: "First draft overdue - one-week extension",
+    subject: "One more week: please share your draft for {{book_title}}",
+    body: "The original first draft deadline has now passed, and we are extending the submission window by one week, until 8 November 2026, for your chapter, \"{{chapter_title}}\".\n\nPlease use this extra week to get your current draft uploaded to ChapterFlow. It does not need to be polished or complete. If some sections still need development, references need checking, or your conclusion is taking shape, please submit what you have and briefly note any unfinished areas.\n\nA working draft gives us something to respond to and helps us move your chapter into the next stage of editorial development. Revision is part of the process: we can support a draft that is on the page, and your experience and voice are worth sharing. Please do not hold back your contribution while waiting for it to feel perfect.\n\nUpload your draft as a Word document (.docx) through your author dashboard by 8 November. Keep the focus on your leadership story, what happened, what you learned, and what other leaders can take from it. Use clear headings and include references where available; flag any gaps in the upload notes.\n\nThank you for staying with the project and for making time to bring your chapter forward. We look forward to reading your work in progress. No reply is needed; please upload your draft through ChapterFlow."
+  },
+  {
     id: "one-week-first-draft-reminder",
     label: "One week to go - first draft not submitted",
     subject: "One week to go: your chapter for {{book_title}}",
@@ -1145,7 +1151,7 @@ function ApprovedAuthorsPanel({ book, chapters }: { book: BookRecord; chapters: 
   const mailtoHref = emailList ? `mailto:?bcc=${encodeURIComponent(emailList)}&subject=${encodeURIComponent("ChapterFlow update for approved authors")}` : "";
   const [bulkTemplateId, setBulkTemplateId] = useState("october-author-meeting");
   const [bulkAudience, setBulkAudience] = useState("current_authors");
-  const isDraftReminder = bulkTemplateId === "one-week-first-draft-reminder";
+  const isDraftReminder = ["one-week-first-draft-reminder", "first-draft-extension"].includes(bulkTemplateId);
   const selectedTemplate = reviewEmailTemplates.find((template) => template.id === bulkTemplateId) ?? reviewEmailTemplates[0];
 
   async function copyEmails() {

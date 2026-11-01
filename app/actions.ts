@@ -666,8 +666,6 @@ export async function reviewProposal(formData: FormData) {
       `Decision: ${decisionLabel}`,
       `Next deadline: ${formatDate(nextDeadline)}`,
       "",
-      emailTemplateName ? `Email template: ${emailTemplateName}` : "",
-      "Message:",
       message,
       "",
       `You can sign in to ChapterFlow here: ${chapterFlowUrl}`,
@@ -682,8 +680,6 @@ export async function reviewProposal(formData: FormData) {
       <p><strong>Chapter proposal:</strong> ${escapeHtml(chapter.title)}<br />
       <strong>Decision:</strong> ${escapeHtml(decisionLabel)}<br />
       <strong>Next deadline:</strong> ${formatDate(nextDeadline)}</p>
-      ${emailTemplateName ? `<p><strong>Email template:</strong> ${escapeHtml(emailTemplateName)}</p>` : ""}
-      <p><strong>Message:</strong></p>
       <p>${escapeHtml(message)}</p>
       <p><a href="${chapterFlowUrl}">Sign in to ChapterFlow</a></p>
       <p>Best wishes,<br />The ChapterFlow editorial team</p>
@@ -763,7 +759,7 @@ export async function sendBulkAuthorEmail(formData: FormData) {
 
   const recipients = (chapters ?? [])
     .filter((chapter) => {
-      if (audience === "awaiting_first_draft" || emailTemplateName === "One week to go - first draft not submitted") {
+      if (audience === "awaiting_first_draft" || ["One week to go - first draft not submitted", "First draft overdue - one-week extension"].includes(emailTemplateName)) {
         const hasDraft = (chapter.submissions ?? []).some((submission) => submission.stage.includes("draft") && (submission.submission_files ?? []).length > 0);
         return chapter.status === "approved" && chapter.stage === "first_draft" && !hasDraft;
       }
@@ -801,18 +797,12 @@ export async function sendBulkAuthorEmail(formData: FormData) {
     };
     const subject = applyEmailPlaceholders(emailSubject, placeholders);
     const message = applyEmailPlaceholders(
-      [emailTemplateBody, additionalMessage ? `Additional note:\n${additionalMessage}` : ""].filter(Boolean).join("\n\n"),
+      [emailTemplateBody, additionalMessage].filter(Boolean).join("\n\n"),
       placeholders
     );
     const body = [
-      `Hello ${recipient.authorName},`,
+      /^(Dear|Hello|Hi)\s/i.test(message) ? "" : `Dear ${recipient.authorName},`,
       "",
-      `This is an update about your chapter for ${book.title}.`,
-      "",
-      `Chapter proposal: ${recipient.chapterTitle}`,
-      "",
-      emailTemplateName ? `Email template: ${emailTemplateName}` : "",
-      "Message:",
       message,
       "",
       `You can sign in to ChapterFlow here: ${chapterFlowUrl}`,
@@ -821,11 +811,7 @@ export async function sendBulkAuthorEmail(formData: FormData) {
       "The ChapterFlow editorial team"
     ].join("\n");
     const html = `
-      <p>Hello ${escapeHtml(recipient.authorName)},</p>
-      <p>This is an update about your chapter for <strong>${escapeHtml(book.title)}</strong>.</p>
-      <p><strong>Chapter proposal:</strong> ${escapeHtml(recipient.chapterTitle)}</p>
-      ${emailTemplateName ? `<p><strong>Email template:</strong> ${escapeHtml(emailTemplateName)}</p>` : ""}
-      <p><strong>Message:</strong></p>
+      ${/^(Dear|Hello|Hi)\s/i.test(message) ? "" : `<p>Dear ${escapeHtml(recipient.authorName)},</p>`}
       <p>${escapeHtml(message)}</p>
       <p><a href="${chapterFlowUrl}">Sign in to ChapterFlow</a></p>
       <p>Best wishes,<br />The ChapterFlow editorial team</p>
