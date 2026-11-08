@@ -227,6 +227,12 @@ const reviewEmailTemplates = [
       "This is a reminder that the author meeting for Mission Integrity will take place on October 11 at 8:00 a.m. UK time.\n\nGoogle Meet joining information:\nhttps://meet.google.com/ave-show-szf\n\nThe meeting will last approximately 45 minutes. We will use the time to:\n- Bring authors together as we move into the next stage of the writing process.\n- Check where everyone is with their chapter development.\n- Clarify expectations for the draft chapter.\n- Discuss the structure and tone of the chapters.\n- Offer support for authors who are still shaping their ideas.\n- Explain the next steps in the editorial and review process.\n- Introduce or reconnect with the editorial team.\n\nThe purpose of the meeting is to help everyone stay on track, make sure we are aligned, and answer any questions authors may have at this stage.\n\nPlease do your best to attend. If you have any questions before the meeting, feel free to get in touch."
   },
   {
+    id: "first-draft-november-15",
+    label: "First draft reminder - November 15 deadline",
+    subject: "Your chapter still matters: please submit a draft by 15 November",
+    body: "Thank you for your proposal, \"{{chapter_title}}\", and for the experience and perspective you are bringing to {{book_title}}. If you have not yet turned your proposal into a chapter draft, please be assured that getting a draft submitted is still the right next step.\n\nWe are extending the first draft deadline to 15 November 2026. There is still an opportunity to move your chapter forward, and we would very much like to read what you have developed so far.\n\nYour draft does not need to be polished or fully complete. Please submit your current version, even if some sections need developing, references need checking, or your conclusion is still taking shape. You can briefly note any unfinished areas when you upload it. A working draft gives the editorial team something to respond to and helps us guide you through the next stage.\n\nStart with the leadership experience you want to share: the context, what happened, the decisions or tensions you encountered, and what you learned. Then draw out what other international school leaders might take from your story. Clear, honest writing in your own voice is a valuable starting point.\n\nPlease sign in to ChapterFlow and upload your chapter as a Word document (.docx) through Draft upload by 15 November. If you are having difficulty uploading or need support to move forward, please contact the editorial team.\n\nThank you for staying with the project. Your contribution matters, and we look forward to helping you develop it further."
+  },
+  {
     id: "first-draft-extension",
     label: "First draft overdue - one-week extension",
     subject: "One more week: please share your draft for {{book_title}}",
@@ -1190,7 +1196,7 @@ function ApprovedAuthorsPanel({ book, chapters }: { book: BookRecord; chapters: 
   const mailtoHref = emailList ? `mailto:?bcc=${encodeURIComponent(emailList)}&subject=${encodeURIComponent("ChapterFlow update for approved authors")}` : "";
   const [bulkTemplateId, setBulkTemplateId] = useState("october-author-meeting");
   const [bulkAudience, setBulkAudience] = useState("current_authors");
-  const isDraftReminder = ["one-week-first-draft-reminder", "first-draft-extension"].includes(bulkTemplateId);
+  const isDraftReminder = ["one-week-first-draft-reminder", "first-draft-extension", "first-draft-november-15"].includes(bulkTemplateId);
   const selectedTemplate = reviewEmailTemplates.find((template) => template.id === bulkTemplateId) ?? reviewEmailTemplates[0];
 
   async function copyEmails() {

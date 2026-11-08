@@ -820,7 +820,7 @@ export async function sendBulkAuthorEmail(formData: FormData) {
 
   const recipients = (chapters ?? [])
     .filter((chapter) => {
-      if (audience === "awaiting_first_draft" || ["One week to go - first draft not submitted", "First draft overdue - one-week extension"].includes(emailTemplateName)) {
+      if (audience === "awaiting_first_draft" || ["One week to go - first draft not submitted", "First draft overdue - one-week extension", "First draft reminder - November 15 deadline"].includes(emailTemplateName)) {
         const hasDraft = (chapter.submissions ?? []).some((submission) => submission.stage.includes("draft") && (submission.submission_files ?? []).length > 0);
         return chapter.status === "approved" && chapter.stage === "first_draft" && !hasDraft;
       }
