@@ -71,6 +71,7 @@ type ReviewRecord = {
 };
 
 type ChapterRecord = {
+  author_id?: string;
   issue_id?: string | null;
   id: string;
   book_id: string;
@@ -1273,15 +1274,36 @@ function PeerReviewAdminPanel({
   const selectedChapter = chapters.find((chapter) => chapter.id === selectedChapterId) ?? chapters[0];
   const selectedAssignments = selectedChapter ? assignments.filter((assignment) => assignment.chapter_id === selectedChapter.id) : [];
   const incompleteAssignments = assignments.filter((assignment) => !assignment.peer_reviews?.length && assignment.status !== "completed");
-  const chaptersMissingReviewCopies = chapters.filter((chapter) => !latestApprovedReviewCopy(chapter));
-  const canGenerate = chapters.length >= requiredReviewCount + 1 && !chaptersMissingReviewCopies.length;
+  const readyChapters = chapters.filter((chapter) => chapter.status === "submitted" && chapter.stage === "first_draft" &&
+    chapter.submissions?.some((submission) => submission.stage === "first_draft" && submission.submission_files?.length) && latestApprovedReviewCopy(chapter));
+  const canGenerate = readyChapters.length >= requiredReviewCount + 1;
+  const reviewerIds = [...new Set([...readyChapters.map((chapter) => chapter.author_id).filter((id): id is string => Boolean(id)), ...assignments.map((assignment) => assignment.reviewer_id)])];
 
   return (
     <div className="admin-tools peer-admin">
       <div>
         <h3>Blind peer review</h3>
-        <p className="muted">Open the stage only when drafts are ready. ChapterFlow assigns two reviewers to each approved chapter and two chapters to each author.</p>
+        <p className="muted">Only authors with a submitted first draft and an approved anonymised copy join this batch. Existing assignments and completed reviews are retained.</p>
       </div>
+      <section className="peer-coverage-list">
+        <strong>Ready for this batch: {readyChapters.length} authors</strong>
+        {readyChapters.map((chapter) => <p key={chapter.id}>{chapter.profiles?.full_name || chapter.profiles?.email || "Author"} · {chapter.title}</p>)}
+        <p className="muted">{chapters.length - readyChapters.length} chapters excluded until their first draft is submitted and anonymised copy approved.</p>
+      </section>
+      <section className="table-panel">
+        <h3>Reviewer progress</h3>
+        <div className="chapter-table">
+          <div className="table-row table-head"><span>Reviewer</span><span>Email</span><span>Assigned</span><span>Completed</span><span>Outstanding</span></div>
+          {reviewerIds.map((id) => {
+            const own = chapters.find((chapter) => chapter.author_id === id)?.profiles;
+            const person = own ?? singleRecord(assignments.find((assignment) => assignment.reviewer_id === id)?.reviewer);
+            const work = assignments.filter((assignment) => assignment.reviewer_id === id);
+            const done = work.filter((assignment) => assignment.status === "completed" || assignment.peer_reviews?.length).length;
+            return <div className="table-row" key={id}><span>{person?.full_name || "Reviewer"}</span><span>{person?.email || ""}</span><span>{work.length}</span><span>{done}</span><span>{work.length - done}</span></div>;
+          })}
+          {!reviewerIds.length ? <p className="muted">Reviewer progress appears here when chapters are ready or assignments exist.</p> : null}
+        </div>
+      </section>
       <form action={savePeerReviewSettings}>
         <input type="hidden" name="book_id" value={book.id} />
         <label>Peer review status<select name="is_open" defaultValue={settings?.is_open ? "open" : "closed"}><option value="closed">Closed to authors</option><option value="open">Open to reviewers</option></select></label>
@@ -1320,7 +1342,7 @@ function PeerReviewAdminPanel({
           <input type="hidden" name="book_id" value={book.id} />
           <div className="warning-box">
             <strong>Before generating assignments</strong>
-            <p>Only continue when every chapter has an approved anonymised review copy. The email option sends reviewer assignment emails immediately.</p>
+            <p>This batch includes only the {readyChapters.length} ready authors listed above. The email option immediately emails outstanding, unnotified assignments in this group.</p>
             <label className="check-row">
               <input type="checkbox" checked={assignmentConfirmed} onChange={(event) => setAssignmentConfirmed(event.target.checked)} />
               <span>I understand and want to generate peer review assignments.</span>
@@ -1329,8 +1351,7 @@ function PeerReviewAdminPanel({
           <button disabled={!canGenerate || !assignmentConfirmed} type="submit" name="_action" value="save">Generate assignments</button>
           <button className="primary" disabled={!canGenerate || !assignmentConfirmed} type="submit" name="_action" value="notify">Generate and email reviewers</button>
         </form>
-        {chapters.length < requiredReviewCount + 1 ? <p className="muted">At least {requiredReviewCount + 1} approved chapters are needed for blind peer review without self-review.</p> : null}
-        {chaptersMissingReviewCopies.length ? <p className="muted">Missing anonymised review copies: {chaptersMissingReviewCopies.map((chapter) => chapter.title).join(", ")}.</p> : null}
+        {!canGenerate ? <p className="muted">At least {requiredReviewCount + 1} submitted first drafts with approved anonymised copies are needed for this batch.</p> : null}
         <form action={sendPeerReviewReminders}>
           <input type="hidden" name="book_id" value={book.id} />
           <button disabled={!incompleteAssignments.length} type="submit">Send late review reminders</button>

@@ -981,7 +981,7 @@ export async function generatePeerReviewAssignments(formData: FormData) {
     .maybeSingle();
   const { data: chapters, error: chapterError } = await supabase
     .from("chapters")
-    .select("id, title, author_id, profiles:author_id(full_name, email), peer_review_files(id, status)")
+    .select("id, title, author_id, stage, status, profiles:author_id(full_name, email), submissions(stage, submission_files(id)), peer_review_files(id, status)")
     .eq("book_id", bookId)
     .in("status", ["approved", "submitted", "complete"])
     .order("created_at", { ascending: true });
@@ -990,38 +990,38 @@ export async function generatePeerReviewAssignments(formData: FormData) {
     throw new Error(chapterError.message);
   }
 
-  const eligibleChapters = (chapters ?? []).filter((chapter) => chapter.author_id);
+  const eligibleChapters = (chapters ?? []).filter((chapter) =>
+    chapter.author_id && chapter.status === "submitted" && chapter.stage === "first_draft" &&
+    (chapter.submissions ?? []).some((submission) => submission.stage === "first_draft" && submission.submission_files.length > 0) &&
+    (chapter.peer_review_files ?? []).some((file) => file.status === "approved")
+  );
 
   const requiredReviewCount = Math.min(3, Math.max(2, Number(settings?.required_review_count) || 2));
 
   if (eligibleChapters.length < requiredReviewCount + 1) {
-    throw new Error(`At least ${requiredReviewCount + 1} approved chapters are needed so each author can review ${requiredReviewCount} chapters without reviewing their own.`);
+    throw new Error(`At least ${requiredReviewCount + 1} submitted first drafts with approved anonymised copies are needed for this batch.`);
   }
 
-  const chaptersWithoutReviewCopies = eligibleChapters.filter((chapter) => {
-    const files = Array.isArray(chapter.peer_review_files) ? chapter.peer_review_files : [];
-    return !files.some((file) => file.status === "approved");
-  });
-
-  if (chaptersWithoutReviewCopies.length) {
-    throw new Error(`Upload and approve anonymised review copies before generating assignments. Missing: ${chaptersWithoutReviewCopies.map((chapter) => chapter.title).join(", ")}`);
-  }
-
-  await supabase.from("peer_review_assignments").delete().eq("book_id", bookId);
+  const { data: existing, error: existingError } = await supabase.from("peer_review_assignments").select("id, chapter_id, reviewer_id, notified_at, status").eq("book_id", bookId);
+  if (existingError) throw new Error(existingError.message);
+  if (new Set(eligibleChapters.map((chapter) => chapter.author_id)).size !== eligibleChapters.length) throw new Error("This batch requires one chapter per author. Please separate issues or duplicate author entries before assigning reviews.");
 
   const assignments = eligibleChapters.flatMap((chapter, index) => {
-    const reviewerChapters = Array.from({ length: requiredReviewCount }, (_, offset) => eligibleChapters[(index + offset + 1) % eligibleChapters.length]);
+    const current = (existing ?? []).filter((assignment) => assignment.chapter_id === chapter.id);
+    const reviewerChapters = Array.from({ length: eligibleChapters.length - 1 }, (_, offset) => eligibleChapters[(index + offset + 1) % eligibleChapters.length])
+      .filter((candidate) => !current.some((assignment) => assignment.reviewer_id === candidate.author_id))
+      .slice(0, Math.max(0, requiredReviewCount - current.length));
     return reviewerChapters.map((reviewerChapter) => ({
       book_id: bookId,
       chapter_id: chapter.id,
       reviewer_id: reviewerChapter.author_id,
       assigned_by: user.id,
       status: "assigned",
-      notified_at: shouldNotify ? new Date().toISOString() : null
+      notified_at: null
     }));
   });
 
-  const { error: assignmentError } = await supabase.from("peer_review_assignments").insert(assignments);
+  const { error: assignmentError } = assignments.length ? await supabase.from("peer_review_assignments").upsert(assignments, { onConflict: "chapter_id,reviewer_id", ignoreDuplicates: true }) : { error: null };
 
   if (assignmentError) {
     throw new Error(assignmentError.message);
@@ -1031,8 +1031,10 @@ export async function generatePeerReviewAssignments(formData: FormData) {
     const siteUrl = getSiteUrl();
     const assignmentsByReviewer = new Map<string, { email: string; name: string; chapters: string[] }>();
 
-    eligibleChapters.forEach((chapter, index) => {
-      const reviewerChapters = Array.from({ length: requiredReviewCount }, (_, offset) => eligibleChapters[(index + offset + 1) % eligibleChapters.length]);
+    const { data: unsent, error: unsentError } = await supabase.from("peer_review_assignments").select("id, chapter_id, reviewer_id").eq("book_id", bookId).is("notified_at", null).neq("status", "completed");
+    if (unsentError) throw new Error(unsentError.message);
+    eligibleChapters.forEach((chapter) => {
+      const reviewerChapters = eligibleChapters.filter((candidate) => (unsent ?? []).some((assignment) => assignment.chapter_id === chapter.id && assignment.reviewer_id === candidate.author_id));
       reviewerChapters.forEach((reviewerChapter) => {
         const reviewerProfile = Array.isArray(reviewerChapter.profiles) ? reviewerChapter.profiles[0] : reviewerChapter.profiles;
         if (!reviewerProfile?.email) return;
@@ -1054,7 +1056,7 @@ export async function generatePeerReviewAssignments(formData: FormData) {
         "",
         `The blind peer review stage for ${book?.title ?? "the edited book project"} is now open.`,
         "",
-        `You have been assigned ${requiredReviewCount} chapter${requiredReviewCount === 1 ? "" : "s"} to review:`,
+        `You have ${reviewer.chapters.length} new or previously unnotified chapter${reviewer.chapters.length === 1 ? "" : "s"} to review:`,
         chapterList,
         "",
         `Please complete your reviews by ${formatDate(settings?.review_deadline)}.`,
@@ -1070,7 +1072,7 @@ export async function generatePeerReviewAssignments(formData: FormData) {
       const html = `
         <p>Hello ${escapeHtml(reviewer.name)},</p>
         <p>The blind peer review stage for <strong>${escapeHtml(book?.title ?? "the edited book project")}</strong> is now open.</p>
-        <p>You have been assigned ${requiredReviewCount} chapter${requiredReviewCount === 1 ? "" : "s"} to review:</p>
+        <p>You have ${reviewer.chapters.length} new or previously unnotified chapter${reviewer.chapters.length === 1 ? "" : "s"} to review:</p>
         <ol>${reviewer.chapters.map((title) => `<li>${escapeHtml(title)}</li>`).join("")}</ol>
         <p>Please complete your reviews by <strong>${formatDate(settings?.review_deadline)}</strong>.</p>
         <p>The review process is guided in ChapterFlow. You will be asked to comment on structure, alignment with Mission Integrity, clarity of the story, practical value for school leaders, use of evidence, and recommended improvements.</p>
@@ -1080,6 +1082,12 @@ export async function generatePeerReviewAssignments(formData: FormData) {
       `;
 
       await sendResendEmail({ to: reviewer.email, subject, text: body, html });
+      const reviewerId = eligibleChapters.find((chapter) => {
+        const person = Array.isArray(chapter.profiles) ? chapter.profiles[0] : chapter.profiles;
+        return person?.email === reviewer.email;
+      })?.author_id;
+      const ids = (unsent ?? []).filter((assignment) => assignment.reviewer_id === reviewerId && eligibleChapters.some((chapter) => chapter.id === assignment.chapter_id)).map((assignment) => assignment.id);
+      if (ids.length) await supabase.from("peer_review_assignments").update({ notified_at: new Date().toISOString() }).in("id", ids);
     }
   }
 
