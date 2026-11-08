@@ -5,6 +5,7 @@ import { useFormStatus } from "react-dom";
 import { acceptAuthorAgreement, adminUploadDraftManuscript, generatePeerReviewAssignments, resetPeerReviewProcess, reviewProposal, saveCallSettings, savePeerReviewSettings, saveProjectAgreement, sendBulkAuthorEmail, sendPeerReviewFeedbackPacket, sendPeerReviewReminders, submitPeerReview, submitProposal, uploadAnonymisedReviewCopy, uploadDraftManuscript } from "@/app/actions";
 import { AuthButtons } from "@/components/auth-buttons";
 import { workflowStages } from "@/lib/sample-data";
+import { AnonymisationEditor } from "@/components/anonymisation-editor";
 import { manageProjectMember, createMagazineIssue } from "@/app/actions";
 
 type ProjectMember = { book_id: string; user_id: string; role: string; profiles: { full_name: string; email: string } | { full_name: string; email: string }[] | null };
@@ -1382,6 +1383,7 @@ function AnonymisedReviewCopyForm({ book, chapter }: { book: BookRecord; chapter
           ))}
         </div>
       ) : <p className="muted">No original draft file has been uploaded for this chapter yet.</p>}
+      {originalDraft?.submission_files?.map((file) => <AnonymisationEditor key={file.id} fileId={file.id} />)}
       {reviewCopy ? (
         <div className="notice">Approved review copy: <a href={peerReviewFileHref(reviewCopy)} target="_blank" rel="noreferrer">{reviewCopy.file_name}</a></div>
       ) : null}
