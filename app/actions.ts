@@ -915,7 +915,19 @@ export async function sendBulkAuthorEmail(formData: FormData) {
   revalidatePath("/");
 }
 
-export async function savePeerReviewSettings(formData: FormData) {
+export async function savePeerReviewSettings(
+  _previous: { success: boolean; error: string; isOpen: boolean | null },
+  formData: FormData
+) {
+  try {
+    const isOpen = await persistPeerReviewSettings(formData);
+    return { success: true, error: "", isOpen };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : "The peer review settings could not be saved.", isOpen: null };
+  }
+}
+
+async function persistPeerReviewSettings(formData: FormData) {
   const { supabase, user, profile } = await getSignedInProfile();
 
   if (!["admin", "editor"].includes(String(profile.role))) {
@@ -933,7 +945,7 @@ export async function savePeerReviewSettings(formData: FormData) {
     throw new Error("Choose a book project before editing peer review.");
   }
 
-  const { error } = await supabase.from("peer_review_settings").upsert(
+  const { data: saved, error } = await supabase.from("peer_review_settings").upsert(
     {
       book_id: bookId,
       is_open: isOpen,
@@ -945,13 +957,23 @@ export async function savePeerReviewSettings(formData: FormData) {
       updated_at: new Date().toISOString()
     },
     { onConflict: "book_id" }
-  );
+  ).select("book_id, is_open").single();
 
   if (error) {
-    throw new Error(error.message);
+    throw new Error(`Could not save peer review settings: ${error.message}`);
+  }
+
+  if (!saved || saved.book_id !== bookId || saved.is_open !== isOpen) {
+    throw new Error("The database did not confirm the requested peer review status. Please check the project permissions.");
+  }
+
+  const { data: verified, error: verifyError } = await supabase.from("peer_review_settings").select("is_open").eq("book_id", bookId).single();
+  if (verifyError || verified?.is_open !== isOpen) {
+    throw new Error(`Settings were written but could not be verified: ${verifyError?.message ?? "the stored status differs from your selection"}`);
   }
 
   revalidatePath("/");
+  return verified.is_open;
 }
 
 export async function generatePeerReviewAssignments(formData: FormData) {
@@ -1156,7 +1178,19 @@ export async function resetPeerReviewProcess(formData: FormData) {
   revalidatePath("/");
 }
 
-export async function submitPeerReview(formData: FormData) {
+export async function submitPeerReview(
+  _previous: { success: boolean; error: string; warning: string },
+  formData: FormData
+) {
+  try {
+    const warning = await persistPeerReview(formData);
+    return { success: true, error: "", warning };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : "The review could not be saved.", warning: "" };
+  }
+}
+
+async function persistPeerReview(formData: FormData) {
   const { supabase, user } = await getSignedInProfile();
 
   const assignmentId = textValue(formData, "assignment_id");
@@ -1186,16 +1220,16 @@ export async function submitPeerReview(formData: FormData) {
 
   const { data: assignment, error: assignmentError } = await supabase
     .from("peer_review_assignments")
-    .select("id, reviewer_id")
+    .select("id, reviewer_id, chapter_id")
     .eq("id", assignmentId)
     .eq("reviewer_id", user.id)
     .single();
 
-  if (assignmentError || !assignment) {
+  if (assignmentError || !assignment || assignment.chapter_id !== chapterId) {
     throw new Error("This peer review assignment could not be found for your account.");
   }
 
-  const { error: reviewError } = await supabase.from("peer_reviews").upsert(
+  const { data: savedReview, error: reviewError } = await supabase.from("peer_reviews").upsert(
     {
       assignment_id: assignmentId,
       chapter_id: chapterId,
@@ -1218,15 +1252,21 @@ export async function submitPeerReview(formData: FormData) {
       updated_at: new Date().toISOString()
     },
     { onConflict: "assignment_id" }
-  );
+  ).select("id").single();
 
-  if (reviewError) {
-    throw new Error(reviewError.message);
+  if (reviewError || !savedReview) {
+    throw new Error(`Your review could not be saved: ${reviewError?.message ?? "the database did not confirm the save"}`);
   }
 
-  await supabase.from("peer_review_assignments").update({ status: "completed" }).eq("id", assignmentId);
+  const { data: completed } = await supabase.from("peer_review_assignments").select("status").eq("id", assignmentId).single();
+  let warning = "";
+  if (completed?.status !== "completed") {
+    const { data: updated, error: statusError } = await supabase.from("peer_review_assignments").update({ status: "completed" }).eq("id", assignmentId).eq("reviewer_id", user.id).select("id").maybeSingle();
+    if (statusError || !updated) warning = "Your review is saved, but the assignment status could not be updated. Please ask the editor to apply the peer-review completion SQL update; you do not need to submit again.";
+  }
 
   revalidatePath("/");
+  return warning;
 }
 
 export async function sendPeerReviewFeedbackPacket(formData: FormData) {

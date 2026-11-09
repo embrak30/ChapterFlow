@@ -198,6 +198,10 @@ textarea { min-height: 110px; resize: vertical; }
 .peer-packet-editor { background: #fff; border: 1px solid var(--line); border-radius: 8px; display: grid; gap: .85rem; padding: .85rem; }
 .packet-review { border: 1px solid var(--line); border-radius: 8px; display: grid; gap: .65rem; padding: .75rem; }
 .packet-review textarea { min-height: 360px; }
+.received-review-text { min-width: 0; }
+.received-review-text summary { cursor: pointer; font-weight: 700; margin-bottom: .75rem; }
+.received-review-text pre { font-family: inherit; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; margin: .75rem 0; }
+#peer-review-packet { scroll-margin-top: 1rem; }
 .agreement-panel { display: grid; gap: 1rem; grid-column: 1 / -1; }
 .agreement-text { border: 1px solid var(--line); border-radius: 8px; display: grid; gap: 1rem; padding: 1rem; }
 .agreement-cover { background: #f7fafc; border: 1px solid var(--line); border-radius: 7px; display: grid; gap: .35rem; padding: .85rem; }

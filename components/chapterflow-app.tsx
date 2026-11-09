@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useActionState, useEffect, useMemo, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { acceptAuthorAgreement, adminUploadDraftManuscript, generatePeerReviewAssignments, resetPeerReviewProcess, reviewProposal, saveCallSettings, savePeerReviewSettings, saveProjectAgreement, sendBulkAuthorEmail, sendPeerReviewFeedbackPacket, sendPeerReviewReminders, submitPeerReview, submitProposal, uploadAnonymisedReviewCopy, uploadDraftManuscript } from "@/app/actions";
 import { AuthButtons } from "@/components/auth-buttons";
@@ -161,6 +161,7 @@ type AgreementAcceptanceRecord = {
 };
 
 type ChapterFlowAppProps = {
+  peerReviewSettingsError?: string;
   isSuperAdmin: boolean;
   userId?: string;
   projectMembers: ProjectMember[];
@@ -408,7 +409,7 @@ function formatPeerReviewForAuthor(review: PeerReviewRecord) {
   ].join("\n");
 }
 
-export function ChapterFlowApp({ userEmail, userName, userRole, books, chapters, peerReviewSettings, peerReviewAssignments, bookAgreements, agreementAcceptances, isSuperAdmin, userId, projectMembers, magazineIssues }: ChapterFlowAppProps) {
+export function ChapterFlowApp({ userEmail, userName, userRole, books, chapters, peerReviewSettings, peerReviewAssignments, bookAgreements, agreementAcceptances, isSuperAdmin, userId, projectMembers, magazineIssues, peerReviewSettingsError }: ChapterFlowAppProps) {
   const isSignedIn = Boolean(userEmail);
   let canViewAdmin = userRole === "admin";
   let canViewFacilitator = userRole === "facilitator" || canViewAdmin;
@@ -474,6 +475,7 @@ export function ChapterFlowApp({ userEmail, userName, userRole, books, chapters,
           <AuthButtons isSignedIn={isSignedIn} email={userEmail} />
         </div>
       </header>
+      {peerReviewSettingsError ? <section className="panel admin-page" role="alert"><strong>Peer review availability could not be loaded.</strong><p>{canViewAdmin ? peerReviewSettingsError : "Please contact the editor. Your assignments have not been reset."}</p></section> : null}
       {role === "author" && selectedBook.project_type === "magazine" ? <label className="panel admin-page">Magazine issue<select value={selectedIssue?.id ?? ""} onChange={(event) => setSelectedIssueId(event.target.value)}>{projectIssues.map((issue) => <option key={issue.id} value={issue.id}>{issue.title}</option>)}</select></label> : null}
 
       {isSuperAdmin ? <section className="panel admin-page"><p className="eyebrow">Super admin</p><h2>Project team: {selectedBook.title}</h2><form action={manageProjectMember} className="form-grid"><input type="hidden" name="book_id" value={selectedBook.id} /><label>Team member email<input name="email" type="email" required /></label><label>Project access<select name="role"><option value="admin">Project admin / editor</option><option value="facilitator">Facilitator (read only)</option><option value="remove">Remove access</option></select></label><button type="submit">Save project access</button></form>{projectMembers.filter((member) => member.book_id === selectedBook.id).map((member) => <p key={member.user_id}>{singleRecord(member.profiles)?.email} — {member.role}</p>)}</section> : null}
@@ -1013,15 +1015,16 @@ function PeerReviewReadingRoom({ assignment, index }: { assignment: PeerReviewAs
             </ul>
           </div>
         </section>
-        <PeerReviewForm assignment={assignment} existingReview={existingReview} />
+        <PeerReviewForm key={assignment.id} assignment={assignment} existingReview={existingReview} />
       </div>
     </article>
   );
 }
 
 function PeerReviewForm({ assignment, existingReview }: { assignment: PeerReviewAssignmentRecord; existingReview?: PeerReviewRecord }) {
+  const [reviewState, reviewAction] = useActionState(submitPeerReview, { success: false, error: "", warning: "" });
   return (
-    <form action={submitPeerReview} className="peer-review-form peer-reading-form">
+    <form action={reviewAction} onReset={(event) => event.preventDefault()} className="peer-review-form peer-reading-form">
       <input type="hidden" name="assignment_id" value={assignment.id} />
       <input type="hidden" name="chapter_id" value={assignment.chapter_id} />
       <fieldset className="checklist-field">
@@ -1049,6 +1052,9 @@ function PeerReviewForm({ assignment, existingReview }: { assignment: PeerReview
       <label>Top three actions<textarea name="recommendations" required minLength={120} defaultValue={existingReview?.recommendations ?? ""} placeholder="List the top three actions the author should take next. Please make them specific and usable." /></label>
       <label>Overall recommendation<select name="overall_recommendation" defaultValue={existingReview?.overall_recommendation ?? "revise_and_resubmit"}><option value="minor_revisions">Minor revisions</option><option value="revise_and_resubmit">Revise and strengthen</option><option value="major_revisions">Major revisions needed</option><option value="ready_for_editorial_review">Ready for editorial review</option></select></label>
       <PeerReviewSubmitButton hasExistingReview={Boolean(existingReview)} />
+      {reviewState.error ? <p role="alert">{reviewState.error}</p> : null}
+      {reviewState.success ? <p className="notice" role="status">Your review has been saved successfully.</p> : null}
+      {reviewState.warning ? <p role="alert">{reviewState.warning}</p> : null}
     </form>
   );
 }
@@ -1271,6 +1277,10 @@ function PeerReviewAdminPanel({
 }) {
   const [selectedChapterId, setSelectedChapterId] = useState(chapters[0]?.id ?? "");
   const [assignmentConfirmed, setAssignmentConfirmed] = useState(false);
+  const [settingsState, settingsAction, settingsPending] = useActionState(savePeerReviewSettings, { success: false, error: "", isOpen: null });
+  const [reviewStatus, setReviewStatus] = useState(settings?.is_open ? "open" : "closed");
+  useEffect(() => { setReviewStatus(settings?.is_open ? "open" : "closed"); }, [book.id, settings?.is_open]);
+  useEffect(() => { if (settingsState.success && settingsState.isOpen !== null) setReviewStatus(settingsState.isOpen ? "open" : "closed"); }, [settingsState]);
   const requiredReviewCount = settings?.required_review_count ?? 2;
   const chapterCoverage = chapters.map((chapter) => {
     const chapterAssignments = assignments.filter((assignment) => assignment.chapter_id === chapter.id);
@@ -1284,6 +1294,11 @@ function PeerReviewAdminPanel({
     chapter.submissions?.some((submission) => submission.stage === "first_draft" && submission.submission_files?.length) && latestApprovedReviewCopy(chapter));
   const canGenerate = readyChapters.length >= requiredReviewCount + 1;
   const reviewerIds = [...new Set([...readyChapters.map((chapter) => chapter.author_id).filter((id): id is string => Boolean(id)), ...assignments.map((assignment) => assignment.reviewer_id)])];
+  const receivedReviews = assignments.filter((assignment) => assignment.peer_reviews?.length);
+  function openReview(chapterId: string) {
+    setSelectedChapterId(chapterId);
+    requestAnimationFrame(() => document.getElementById("peer-review-packet")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+  }
 
   return (
     <div className="admin-tools peer-admin">
@@ -1310,13 +1325,28 @@ function PeerReviewAdminPanel({
           {!reviewerIds.length ? <p className="muted">Reviewer progress appears here when chapters are ready or assignments exist.</p> : null}
         </div>
       </section>
-      <form action={savePeerReviewSettings}>
+      <section className="peer-coverage-list">
+        <h3>Received reviews ({receivedReviews.length})</h3>
+        <p className="muted">These are reviews people have written. Open the reviewed chapter to read its feedback.</p>
+        {receivedReviews.map((assignment) => {
+          const reviewedChapter = chapters.find((chapter) => chapter.id === assignment.chapter_id) ?? singleRecord(assignment.chapter);
+          const reviewer = singleRecord(assignment.reviewer);
+          return <div className="file-row" key={assignment.id}><div><strong>{reviewedChapter?.title || "Reviewed chapter"}</strong><p className="muted">Reviewed by {reviewer?.full_name || reviewer?.email || "Reviewer"}</p></div><button type="button" onClick={() => openReview(assignment.chapter_id)}>Read review</button></div>;
+        })}
+        {!receivedReviews.length ? <p className="muted">No review text has loaded for this project yet. Completed assignment counts alone do not confirm that feedback is available.</p> : null}
+        {assignments.some((assignment) => assignment.status === "completed" && !assignment.peer_reviews?.length) ? <p role="alert">Some assignments are marked completed but their review text has not loaded. Check review access in Supabase before asking reviewers to resubmit.</p> : null}
+      </section>
+      <form action={settingsAction}>
         <input type="hidden" name="book_id" value={book.id} />
-        <label>Peer review status<select name="is_open" defaultValue={settings?.is_open ? "open" : "closed"}><option value="closed">Closed to authors</option><option value="open">Open to reviewers</option></select></label>
+        <p className="muted">Saved status: {settings ? settings.is_open ? "Open to reviewers" : "Closed to authors" : "Not configured"}</p>
+        <label>Peer review status<select name="is_open" value={reviewStatus} disabled={settingsPending} onChange={(event) => setReviewStatus(event.target.value)}><option value="closed">Closed to authors</option><option value="open">Open to reviewers</option></select></label>
+        {settingsPending ? <input type="hidden" name="is_open" value={reviewStatus} /> : null}
         <label>Required reviews per chapter<select name="required_review_count" defaultValue={String(requiredReviewCount)}><option value="2">Two reviews</option><option value="3">Three reviews</option></select></label>
         <label>Review deadline<input type="date" name="review_deadline" defaultValue={settings?.review_deadline ?? ""} /></label>
         <label>Reviewer guidance<textarea name="instructions" defaultValue={settings?.instructions ?? "Please provide constructive, specific feedback on structure, alignment with Mission Integrity, clarity of the story, practical value for other leaders, and light use of evidence."} /></label>
-        <button className="primary" type="submit">Save peer review settings</button>
+        <button className="primary" disabled={settingsPending} type="submit">{settingsPending ? "Saving settings..." : "Save peer review settings"}</button>
+        {settingsState.error ? <p role="alert">{settingsState.error}</p> : null}
+        {settingsState.success && settingsState.isOpen === (reviewStatus === "open") ? <p className="notice" role="status">Saved and verified: peer review is {settingsState.isOpen ? "open to reviewers" : "closed to authors"}.</p> : null}
       </form>
       <div className="peer-prep-grid">
         <div className="peer-coverage-list">
@@ -1376,7 +1406,7 @@ function PeerReviewAdminPanel({
           </button>
         )) : <p className="muted">Approved chapters will appear here when they are ready for peer review.</p>}
       </div>
-      {selectedChapter ? <PeerReviewPacketEditor chapter={selectedChapter} assignments={selectedAssignments} requiredReviewCount={requiredReviewCount} /> : null}
+      {selectedChapter ? <PeerReviewPacketEditor key={selectedChapter.id} chapter={selectedChapter} assignments={selectedAssignments} requiredReviewCount={requiredReviewCount} /> : null}
       <div className="email-draft">
         <strong>Assignment email template</strong>
         <p>When you choose “Generate and email reviewers”, each reviewer receives their assigned chapters, the review deadline, your reviewer guidance, and a link back to ChapterFlow.</p>
@@ -1432,10 +1462,11 @@ function PeerReviewPacketEditor({
 }) {
   const completedAssignments = assignments.filter((assignment) => assignment.peer_reviews?.length);
   return (
-    <form action={sendPeerReviewFeedbackPacket} className="peer-packet-editor">
+    <form action={sendPeerReviewFeedbackPacket} className="peer-packet-editor" id="peer-review-packet">
       <input type="hidden" name="chapter_id" value={chapter.id} />
       <div>
         <h3>Review packet for author</h3>
+        <h2>{chapter.title}</h2>
         <p className="muted">{completedAssignments.length}/{requiredReviewCount} reviews received. Select the reviews to include, edit the author-facing text if needed, then send the anonymised packet.</p>
       </div>
       {completedAssignments.length ? completedAssignments.map((assignment, index) => {
@@ -1444,11 +1475,16 @@ function PeerReviewPacketEditor({
         if (!review) return null;
         return (
           <article className="packet-review" key={assignment.id}>
+            <details open className="received-review-text">
+              <summary>Read Reviewer {index + 1} feedback</summary>
+              <p className="muted">Received {formatDate(review.created_at)}</p>
+              <pre>{formatPeerReviewForAuthor(review)}</pre>
+            </details>
             <label className="check-row">
               <input type="checkbox" name="included_review_ids" value={review.id} defaultChecked />
               <span>Include Reviewer {index + 1} {reviewer?.email ? `(admin only: ${reviewer.email})` : ""}</span>
             </label>
-            <textarea name={`edited_review_${review.id}`} defaultValue={formatPeerReviewForAuthor(review)} />
+            <label>Author-facing feedback (editable)<textarea name={`edited_review_${review.id}`} defaultValue={formatPeerReviewForAuthor(review)} /></label>
           </article>
         );
       }) : <p className="muted">No completed peer reviews are available for this chapter yet.</p>}

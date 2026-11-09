@@ -49,11 +49,11 @@ export default async function Home() {
     .from("chapters")
     .select("*, profiles:author_id(full_name, email), submissions(*, submission_files(*)), reviews(*), peer_review_files(*)")
     .order("created_at", { ascending: false });
-  const { data: peerReviewSettings } = await supabase
+  const { data: peerReviewSettings, error: peerReviewSettingsError } = await supabase
     .from("peer_review_settings")
     .select("*")
     .order("created_at", { ascending: true });
-  const { data: peerReviewAssignments } = await supabase
+  const { data: peerReviewAssignments, error: peerReviewAssignmentsError } = await supabase
     .from("peer_review_assignments")
     .select("*, reviewer:reviewer_id(full_name, email), chapter:chapter_id(id, book_id, title, abstract, proposal_outline, stage, status, current_deadline, created_at, profiles:author_id(full_name, email), submissions(*, submission_files(*)), peer_review_files(*)), peer_reviews(*)")
     .order("created_at", { ascending: true });
@@ -76,6 +76,7 @@ export default async function Home() {
       userEmail={user?.email}
       userName={profileName}
       userRole={userRole}
+      peerReviewSettingsError={peerReviewSettingsError?.message ?? peerReviewAssignmentsError?.message}
       isSuperAdmin={Boolean(isSuperAdmin)}
       userId={user?.id}
       projectMembers={projectMembers ?? []}
