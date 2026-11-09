@@ -1,5 +1,6 @@
 import { ChapterFlowApp } from "@/components/chapterflow-app";
 import { createClient } from "@/lib/supabase/server";
+import { relatedRecords } from "@/lib/related-records";
 
 type BookRole = "admin" | "facilitator" | "author";
 
@@ -84,7 +85,10 @@ export default async function Home() {
       books={books ?? []}
       chapters={chapters ?? []}
       peerReviewSettings={peerReviewSettings ?? []}
-      peerReviewAssignments={peerReviewAssignments ?? []}
+      peerReviewAssignments={(peerReviewAssignments ?? []).map((assignment) => ({
+        ...assignment,
+        peer_reviews: relatedRecords(assignment.peer_reviews)
+      }))}
       bookAgreements={bookAgreements ?? []}
       agreementAcceptances={agreementAcceptances ?? []}
     />
