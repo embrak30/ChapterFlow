@@ -1277,6 +1277,7 @@ function PeerReviewAdminPanel({
 }) {
   const [selectedChapterId, setSelectedChapterId] = useState(chapters[0]?.id ?? "");
   const [assignmentConfirmed, setAssignmentConfirmed] = useState(false);
+  const [peerSection, setPeerSection] = useState(assignments.length ? "progress" : "copies");
   const [settingsState, settingsAction, settingsPending] = useActionState(savePeerReviewSettings, { success: false, error: "", isOpen: null });
   const [reviewStatus, setReviewStatus] = useState(settings?.is_open ? "open" : "closed");
   useEffect(() => { setReviewStatus(settings?.is_open ? "open" : "closed"); }, [book.id, settings?.is_open]);
@@ -1295,8 +1296,17 @@ function PeerReviewAdminPanel({
   const canGenerate = readyChapters.length >= requiredReviewCount + 1;
   const reviewerIds = [...new Set([...readyChapters.map((chapter) => chapter.author_id).filter((id): id is string => Boolean(id)), ...assignments.map((assignment) => assignment.reviewer_id)])];
   const receivedReviews = assignments.filter((assignment) => assignment.peer_reviews?.length);
+  const peerSections = [
+    { id: "progress", label: "Progress" },
+    { id: "copies", label: "Anonymised copies" },
+    { id: "assignments", label: "Assignments" },
+    { id: "received", label: `Received reviews (${receivedReviews.length})` },
+    { id: "feedback", label: "Feedback packet" },
+    { id: "settings", label: "Settings" }
+  ];
   function openReview(chapterId: string) {
     setSelectedChapterId(chapterId);
+    setPeerSection("feedback");
     requestAnimationFrame(() => document.getElementById("peer-review-packet")?.scrollIntoView({ behavior: "smooth", block: "start" }));
   }
 
@@ -1305,13 +1315,17 @@ function PeerReviewAdminPanel({
       <div>
         <h3>Blind peer review</h3>
         <p className="muted">Only authors with a submitted first draft and an approved anonymised copy join this batch. Existing assignments and completed reviews are retained.</p>
+        <p className="muted">{settings?.is_open ? "Open to reviewers" : "Closed to reviewers"} · Deadline: {formatDate(settings?.review_deadline)} · {assignments.length} assigned · {receivedReviews.length} reviews received</p>
       </div>
-      <section className="peer-coverage-list">
+      <nav className="peer-section-tabs" aria-label="Peer review sections">
+        {peerSections.map((section) => <button type="button" key={section.id} aria-pressed={peerSection === section.id} className={peerSection === section.id ? "active" : ""} onClick={() => setPeerSection(section.id)}>{section.label}</button>)}
+      </nav>
+      <section hidden={peerSection !== "assignments"} className="peer-coverage-list peer-section">
         <strong>Ready for this batch: {readyChapters.length} authors</strong>
         {readyChapters.map((chapter) => <p key={chapter.id}>{chapter.profiles?.full_name || chapter.profiles?.email || "Author"} · {chapter.title}</p>)}
         <p className="muted">{chapters.length - readyChapters.length} chapters excluded until their first draft is submitted and anonymised copy approved.</p>
       </section>
-      <section className="table-panel">
+      <section hidden={peerSection !== "progress"} className="table-panel peer-section">
         <h3>Reviewer progress</h3>
         <div className="chapter-table">
           <div className="table-row table-head"><span>Reviewer</span><span>Email</span><span>Assigned</span><span>Completed</span><span>Outstanding</span></div>
@@ -1325,7 +1339,7 @@ function PeerReviewAdminPanel({
           {!reviewerIds.length ? <p className="muted">Reviewer progress appears here when chapters are ready or assignments exist.</p> : null}
         </div>
       </section>
-      <section className="peer-coverage-list">
+      <section hidden={peerSection !== "received"} className="peer-coverage-list peer-section">
         <h3>Received reviews ({receivedReviews.length})</h3>
         <p className="muted">These are reviews people have written. Open the reviewed chapter to read its feedback.</p>
         {receivedReviews.map((assignment) => {
@@ -1336,7 +1350,7 @@ function PeerReviewAdminPanel({
         {!receivedReviews.length ? <p className="muted">No review text has loaded for this project yet. Completed assignment counts alone do not confirm that feedback is available.</p> : null}
         {assignments.some((assignment) => assignment.status === "completed" && !assignment.peer_reviews?.length) ? <p role="alert">Some assignments are marked completed but their review text has not loaded. Check review access in Supabase before asking reviewers to resubmit.</p> : null}
       </section>
-      <form action={settingsAction}>
+      <form hidden={peerSection !== "settings"} className="peer-section" action={settingsAction}>
         <input type="hidden" name="book_id" value={book.id} />
         <p className="muted">Saved status: {settings ? settings.is_open ? "Open to reviewers" : "Closed to authors" : "Not configured"}</p>
         <label>Peer review status<select name="is_open" value={reviewStatus} disabled={settingsPending} onChange={(event) => setReviewStatus(event.target.value)}><option value="closed">Closed to authors</option><option value="open">Open to reviewers</option></select></label>
@@ -1348,7 +1362,7 @@ function PeerReviewAdminPanel({
         {settingsState.error ? <p role="alert">{settingsState.error}</p> : null}
         {settingsState.success && settingsState.isOpen === (reviewStatus === "open") ? <p className="notice" role="status">Saved and verified: peer review is {settingsState.isOpen ? "open to reviewers" : "closed to authors"}.</p> : null}
       </form>
-      <div className="peer-prep-grid">
+      <div hidden={peerSection !== "copies"} className="peer-prep-grid peer-section">
         <div className="peer-coverage-list">
           <strong>Anonymised review copy preparation</strong>
           {chapters.length ? chapters.map((chapter) => {
@@ -1363,7 +1377,7 @@ function PeerReviewAdminPanel({
         </div>
         {selectedChapter ? <AnonymisedReviewCopyForm book={book} chapter={selectedChapter} /> : null}
       </div>
-      <div className="peer-admin-actions">
+      <div hidden={peerSection !== "assignments"} className="peer-admin-actions peer-section">
         <form
           action={generatePeerReviewAssignments}
           onSubmit={(event) => {
@@ -1397,17 +1411,20 @@ function PeerReviewAdminPanel({
           <button className="danger-button" type="submit">Close peer review and clear assignments</button>
         </form>
       </div>
-      <div className="peer-coverage-list">
+      <div hidden={peerSection !== "progress"} className="peer-coverage-list peer-section">
         <strong>Review coverage</strong>
         {chapterCoverage.length ? chapterCoverage.map(({ chapter, assigned, completed }) => (
-          <button className={`peer-coverage-row ${selectedChapter?.id === chapter.id ? "selected" : ""}`} key={chapter.id} onClick={() => setSelectedChapterId(chapter.id)} type="button">
+          <button className={`peer-coverage-row ${selectedChapter?.id === chapter.id ? "selected" : ""}`} key={chapter.id} onClick={() => openReview(chapter.id)} type="button">
             <span>{chapter.title}</span>
             <small>{assigned}/{requiredReviewCount} assigned · {completed}/{requiredReviewCount} submitted</small>
           </button>
         )) : <p className="muted">Approved chapters will appear here when they are ready for peer review.</p>}
       </div>
-      {selectedChapter ? <PeerReviewPacketEditor key={selectedChapter.id} chapter={selectedChapter} assignments={selectedAssignments} requiredReviewCount={requiredReviewCount} /> : null}
-      <div className="email-draft">
+      <section hidden={peerSection !== "feedback"} className="peer-section peer-feedback-section">
+        <label>Chapter<select value={selectedChapter?.id ?? ""} onChange={(event) => setSelectedChapterId(event.target.value)}>{chapters.map((chapter) => <option key={chapter.id} value={chapter.id}>{chapter.title}</option>)}</select></label>
+        {selectedChapter ? <PeerReviewPacketEditor key={selectedChapter.id} chapter={selectedChapter} assignments={selectedAssignments} requiredReviewCount={requiredReviewCount} /> : <p className="muted">No chapters are available yet.</p>}
+      </section>
+      <div hidden={peerSection !== "assignments"} className="email-draft peer-section">
         <strong>Assignment email template</strong>
         <p>When you choose “Generate and email reviewers”, each reviewer receives their assigned chapters, the review deadline, your reviewer guidance, and a link back to ChapterFlow.</p>
         <strong>Late reminder template</strong>
