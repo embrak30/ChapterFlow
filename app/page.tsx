@@ -56,12 +56,13 @@ export default async function Home() {
     .order("created_at", { ascending: true });
   const { data: peerReviewAssignments, error: peerReviewAssignmentsError } = await supabase
     .from("peer_review_assignments")
-    .select("*, reviewer:reviewer_id(full_name, email), chapter:chapter_id(id, book_id, title, abstract, proposal_outline, stage, status, current_deadline, created_at, profiles:author_id(full_name, email), submissions(*, submission_files(*)), peer_review_files(*)), peer_reviews(*)")
+    .select("*, batch:batch_id(id, name, review_deadline), reviewer:reviewer_id(full_name, email), chapter:chapter_id(id, book_id, title, abstract, proposal_outline, stage, status, current_deadline, created_at, profiles:author_id(full_name, email), submissions(*, submission_files(*)), peer_review_files(*)), peer_reviews(*)")
     .order("created_at", { ascending: true });
   const { data: bookAgreements } = await supabase
     .from("book_agreements")
     .select("*")
     .order("created_at", { ascending: false });
+  const { data: reviewBatches, error: reviewBatchesError } = await supabase.from("peer_review_batches").select("*").order("created_at", { ascending: true });
   const { data: agreementAcceptances } = await supabase
     .from("agreement_acceptances")
     .select("*, profiles:author_id(full_name, email), chapters:chapter_id(title)")
@@ -77,7 +78,8 @@ export default async function Home() {
       userEmail={user?.email}
       userName={profileName}
       userRole={userRole}
-      peerReviewSettingsError={peerReviewSettingsError?.message ?? peerReviewAssignmentsError?.message}
+      peerReviewSettingsError={peerReviewSettingsError?.message ?? peerReviewAssignmentsError?.message ?? reviewBatchesError?.message}
+      reviewBatches={reviewBatches ?? []}
       isSuperAdmin={Boolean(isSuperAdmin)}
       userId={user?.id}
       projectMembers={projectMembers ?? []}

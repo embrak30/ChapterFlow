@@ -6,6 +6,8 @@ import { acceptAuthorAgreement, adminUploadDraftManuscript, generatePeerReviewAs
 import { AuthButtons } from "@/components/auth-buttons";
 import { workflowStages } from "@/lib/sample-data";
 import { AnonymisationEditor } from "@/components/anonymisation-editor";
+import { previewReviewBatch } from "@/lib/review-batch";
+import { createPeerReviewBatch, sendPeerReviewBatchEmails } from "@/app/actions";
 import { manageProjectMember, createMagazineIssue } from "@/app/actions";
 
 type ProjectMember = { book_id: string; user_id: string; role: string; profiles: { full_name: string; email: string } | { full_name: string; email: string }[] | null };
@@ -119,6 +121,8 @@ type PeerReviewRecord = {
 };
 
 type PeerReviewAssignmentRecord = {
+  batch_id?: string | null;
+  batch?: { id: string; name: string; review_deadline: string | null } | Array<{ id: string; name: string; review_deadline: string | null }> | null;
   id: string;
   book_id: string;
   chapter_id: string;
@@ -161,6 +165,7 @@ type AgreementAcceptanceRecord = {
 };
 
 type ChapterFlowAppProps = {
+  reviewBatches: ReviewBatch[];
   peerReviewSettingsError?: string;
   isSuperAdmin: boolean;
   userId?: string;
@@ -176,6 +181,8 @@ type ChapterFlowAppProps = {
   bookAgreements: BookAgreementRecord[];
   agreementAcceptances: AgreementAcceptanceRecord[];
 };
+
+type ReviewBatch = { id: string; book_id: string; name: string; review_deadline: string | null; required_review_count: number };
 
 const reviewEmailTemplates = [
   {
@@ -409,7 +416,7 @@ function formatPeerReviewForAuthor(review: PeerReviewRecord) {
   ].join("\n");
 }
 
-export function ChapterFlowApp({ userEmail, userName, userRole, books, chapters, peerReviewSettings, peerReviewAssignments, bookAgreements, agreementAcceptances, isSuperAdmin, userId, projectMembers, magazineIssues, peerReviewSettingsError }: ChapterFlowAppProps) {
+export function ChapterFlowApp({ userEmail, userName, userRole, books, chapters, peerReviewSettings, peerReviewAssignments, bookAgreements, agreementAcceptances, isSuperAdmin, userId, projectMembers, magazineIssues, peerReviewSettingsError, reviewBatches }: ChapterFlowAppProps) {
   const isSignedIn = Boolean(userEmail);
   let canViewAdmin = userRole === "admin";
   let canViewFacilitator = userRole === "facilitator" || canViewAdmin;
@@ -482,7 +489,7 @@ export function ChapterFlowApp({ userEmail, userName, userRole, books, chapters,
       {canViewAdmin && selectedBook.project_type === "magazine" ? <section className="panel admin-page"><h2>Magazine issues</h2><form action={createMagazineIssue} className="form-grid"><input type="hidden" name="book_id" value={selectedBook.id} /><label>Issue title<input name="title" required /></label><label>Submission deadline<input name="submission_deadline" type="date" /></label><button type="submit">Create issue</button></form>{magazineIssues.filter((issue) => issue.book_id === selectedBook.id).map((issue) => <p key={issue.id}>{issue.title} · {formatDate(issue.submission_deadline)}</p>)}</section> : null}
 
       {role === "admin" && canViewAdmin ? (
-        <AdminView key={selectedBook.id} book={selectedBook} books={books} chapters={bookChapters} stats={stats} peerReviewSettings={selectedPeerReviewSettings} peerReviewAssignments={selectedPeerReviewAssignments} agreement={selectedAgreement} agreementAcceptances={selectedAgreementAcceptances} isSuperAdmin={isSuperAdmin} />
+        <AdminView reviewBatches={reviewBatches.filter((batch) => batch.book_id === selectedBook.id)} key={selectedBook.id} book={selectedBook} books={books} chapters={bookChapters} stats={stats} peerReviewSettings={selectedPeerReviewSettings} peerReviewAssignments={selectedPeerReviewAssignments} agreement={selectedAgreement} agreementAcceptances={selectedAgreementAcceptances} isSuperAdmin={isSuperAdmin} />
       ) : role === "facilitator" && canViewFacilitator ? (
         <FacilitatorView book={selectedBook} chapters={bookChapters} stats={stats} agreementAcceptances={selectedAgreementAcceptances} />
       ) : role === "author" && isSignedIn ? (
@@ -919,7 +926,7 @@ function PeerReviewAuthorPanel({
         <p className="muted">Work through each assigned chapter in a focused review space. Author names are hidden in this reviewer view.</p>
       </div>
       <div className="peer-review-guidance">
-        <strong>Review deadline: {formatDate(settings.review_deadline)} · {completedCount}/{assignments.length} submitted</strong>
+        <strong>Review deadline: {formatDate(singleRecord(selectedAssignment?.batch)?.review_deadline ?? settings.review_deadline)} · {completedCount}/{assignments.length} submitted</strong>
         <p>{settings.instructions || "Focus on helping the author strengthen the chapter structure, connection to Mission Integrity, clarity of the story, practical value, and use of supporting evidence."}</p>
       </div>
       {assignments.length ? (
@@ -1065,6 +1072,7 @@ function PeerReviewSubmitButton({ hasExistingReview }: { hasExistingReview: bool
 }
 
 function AdminView({
+  reviewBatches,
   book,
   books,
   chapters,
@@ -1075,6 +1083,7 @@ function AdminView({
   agreementAcceptances,
   isSuperAdmin
 }: {
+  reviewBatches: ReviewBatch[];
   book: BookRecord;
   books: BookRecord[];
   chapters: ChapterRecord[];
@@ -1116,7 +1125,7 @@ function AdminView({
 
       <div className="admin-tab-panel">
         {adminTab === "proposals" ? <ReviewWorkspace title="Admin Proposal Board" book={book} chapters={chapters} canDecide /> : null}
-        {adminTab === "peer-review" ? <PeerReviewAdminPanel book={book} chapters={approvedChapters} settings={peerReviewSettings} assignments={peerReviewAssignments} /> : null}
+        {adminTab === "peer-review" ? <PeerReviewAdminPanel batches={reviewBatches} book={book} chapters={approvedChapters} settings={peerReviewSettings} assignments={peerReviewAssignments} /> : null}
         {adminTab === "agreements" ? <AgreementAdminPanel book={book} chapters={approvedChapters} agreement={agreement} acceptances={agreementAcceptances} /> : null}
         {adminTab === "authors" ? <ApprovedAuthorsPanel book={book} chapters={approvedChapters} /> : null}
         {adminTab === "call" ? <CallSettingsForm book={book.id ? book : undefined} hasBooks={books.length > 0} canCreate={isSuperAdmin} /> : null}
@@ -1264,37 +1273,75 @@ function BulkEmailButton({ disabled }: { disabled: boolean }) {
   return <button className={`primary notify-button ${pending ? "sending" : ""}`} disabled={disabled || pending} type="submit">{pending ? "Sending personalised emails..." : "Send personalised email to selected authors"}</button>;
 }
 
+function ReviewBatchBuilder({ bookId, chapters, onCreated }: { bookId: string; chapters: ChapterRecord[]; onCreated: (id: string) => void }) {
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [reviewCount, setReviewCount] = useState(2);
+  const [confirmed, setConfirmed] = useState(false);
+  const [state, action, pending] = useActionState(createPeerReviewBatch, { success: false, error: "", batchId: "" });
+  useEffect(() => { if (state.success && state.batchId) onCreated(state.batchId); }, [state, onCreated]);
+  const selected = chapters.filter((chapter) => selectedIds.includes(chapter.id)).map((chapter) => chapter.id);
+  const preview = previewReviewBatch(selected, reviewCount);
+  function participantName(id: string) {
+    const chapter = chapters.find((entry) => entry.id === id);
+    return chapter?.profiles?.full_name || chapter?.profiles?.email || "Author";
+  }
+  return <form action={action} className="review-batch-builder" onSubmit={(event) => { if (!window.confirm("Create this batch with only the selected participants? Existing batches will stay unchanged. No email is sent yet.")) event.preventDefault(); }}>
+    <h3>Create a new review batch</h3>
+    <input type="hidden" name="book_id" value={bookId} />
+    <div className="form-grid">
+      <label>Batch name<input name="batch_name" required placeholder="Second intake" /></label>
+      <label>Review deadline<input name="batch_deadline" type="date" required /></label>
+      <label>Reviews per chapter<select name="batch_review_count" value={reviewCount} onChange={(event) => { setReviewCount(Number(event.target.value)); setConfirmed(false); }}><option value="2">Two</option><option value="3">Three</option></select></label>
+    </div>
+    <fieldset className="checklist-field"><legend>Select ready, unassigned participants ({selected.length})</legend>
+      {chapters.map((chapter) => <label className="check-row" key={chapter.id}><input type="checkbox" name="chapter_ids" value={chapter.id} checked={selected.includes(chapter.id)} disabled={pending} onChange={(event) => { setSelectedIds(event.target.checked ? [...selected, chapter.id] : selected.filter((id) => id !== chapter.id)); setConfirmed(false); }} /><span>{participantName(chapter.id)} · {chapter.title}</span></label>)}
+      {!chapters.length ? <p className="muted">No unassigned chapters are ready. Submit first drafts and approve their anonymised copies to include them here.</p> : null}
+    </fieldset>
+    {preview.length ? <section className="peer-coverage-list"><h3>Assignment preview</h3>{selected.map((id) => <div key={id}><strong>{participantName(id)} reviews:</strong><ul>{preview.filter((entry) => entry.reviewerChapterId === id).map((entry) => <li key={entry.chapterId}>{chapters.find((chapter) => chapter.id === entry.chapterId)?.title}</li>)}</ul></div>)}<p className="muted">{selected.length} participants · {preview.length} assignments · {reviewCount} reviews per chapter</p></section> : <p className="muted">Select at least {reviewCount + 1} participants to preview assignments.</p>}
+    <label className="check-row"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} /><span>I have checked the participants and assignment preview.</span></label>
+    <button className="primary" disabled={pending || !preview.length || !confirmed} type="submit">{pending ? "Creating batch..." : "Create batch and assignments"}</button>
+    {state.error ? <p role="alert">{state.error}</p> : null}
+    {state.success ? <p className="notice" role="status">Batch created. Select it in Review group and send its invitations when ready.</p> : null}
+  </form>;
+}
+
 function PeerReviewAdminPanel({
+  batches,
   book,
   chapters,
   settings,
-  assignments
+  assignments: allAssignments
 }: {
+  batches: ReviewBatch[];
   book: BookRecord;
   chapters: ChapterRecord[];
   settings?: PeerReviewSettingsRecord;
   assignments: PeerReviewAssignmentRecord[];
 }) {
+  const [batchFilter, setBatchFilter] = useState("all");
+  const activeBatch = batches.find((batch) => batch.id === batchFilter);
+  const assignments = activeBatch ? allAssignments.filter((assignment) => assignment.batch_id === activeBatch.id) : allAssignments;
+  const [emailState, emailAction, emailPending] = useActionState(sendPeerReviewBatchEmails, { success: false, error: "" });
   const [selectedChapterId, setSelectedChapterId] = useState(chapters[0]?.id ?? "");
-  const [assignmentConfirmed, setAssignmentConfirmed] = useState(false);
   const [peerSection, setPeerSection] = useState(assignments.length ? "progress" : "copies");
   const [settingsState, settingsAction, settingsPending] = useActionState(savePeerReviewSettings, { success: false, error: "", isOpen: null });
   const [reviewStatus, setReviewStatus] = useState(settings?.is_open ? "open" : "closed");
   useEffect(() => { setReviewStatus(settings?.is_open ? "open" : "closed"); }, [book.id, settings?.is_open]);
   useEffect(() => { if (settingsState.success && settingsState.isOpen !== null) setReviewStatus(settingsState.isOpen ? "open" : "closed"); }, [settingsState]);
-  const requiredReviewCount = settings?.required_review_count ?? 2;
+  const requiredReviewCount = activeBatch?.required_review_count ?? settings?.required_review_count ?? 2;
   const chapterCoverage = chapters.map((chapter) => {
     const chapterAssignments = assignments.filter((assignment) => assignment.chapter_id === chapter.id);
     const completed = chapterAssignments.filter((assignment) => assignment.peer_reviews?.length || assignment.status === "completed").length;
     return { chapter, assigned: chapterAssignments.length, completed };
-  });
+  }).filter(({ chapter }) => !activeBatch || assignments.some((assignment) => assignment.chapter_id === chapter.id));
   const selectedChapter = chapters.find((chapter) => chapter.id === selectedChapterId) ?? chapters[0];
-  const selectedAssignments = selectedChapter ? assignments.filter((assignment) => assignment.chapter_id === selectedChapter.id) : [];
   const incompleteAssignments = assignments.filter((assignment) => !assignment.peer_reviews?.length && assignment.status !== "completed");
   const readyChapters = chapters.filter((chapter) => chapter.status === "submitted" && chapter.stage === "first_draft" &&
     chapter.submissions?.some((submission) => submission.stage === "first_draft" && submission.submission_files?.length) && latestApprovedReviewCopy(chapter));
-  const canGenerate = readyChapters.length >= requiredReviewCount + 1;
-  const reviewerIds = [...new Set([...readyChapters.map((chapter) => chapter.author_id).filter((id): id is string => Boolean(id)), ...assignments.map((assignment) => assignment.reviewer_id)])];
+  const unassignedChapters = readyChapters.filter((chapter) => !allAssignments.some((assignment) => assignment.chapter_id === chapter.id || assignment.reviewer_id === chapter.author_id));
+  const reviewerIds = [...new Set([...(activeBatch ? [] : readyChapters.map((chapter) => chapter.author_id).filter((id): id is string => Boolean(id))), ...assignments.map((assignment) => assignment.reviewer_id)])];
+  const feedbackChapters = chapters.filter((chapter) => !activeBatch || assignments.some((assignment) => assignment.chapter_id === chapter.id));
+  const packetChapter = feedbackChapters.find((chapter) => chapter.id === selectedChapterId) ?? feedbackChapters[0];
   const receivedReviews = assignments.filter((assignment) => assignment.peer_reviews?.length);
   const peerSections = [
     { id: "progress", label: "Progress" },
@@ -1315,15 +1362,14 @@ function PeerReviewAdminPanel({
       <div>
         <h3>Blind peer review</h3>
         <p className="muted">Only authors with a submitted first draft and an approved anonymised copy join this batch. Existing assignments and completed reviews are retained.</p>
-        <p className="muted">{settings?.is_open ? "Open to reviewers" : "Closed to reviewers"} · Deadline: {formatDate(settings?.review_deadline)} · {assignments.length} assigned · {receivedReviews.length} reviews received</p>
+        <p className="muted">{settings?.is_open ? "Open to reviewers" : "Closed to reviewers"} · Deadline: {formatDate(activeBatch?.review_deadline ?? settings?.review_deadline)} · {assignments.length} assigned · {receivedReviews.length} reviews received</p>
       </div>
       <nav className="peer-section-tabs" aria-label="Peer review sections">
         {peerSections.map((section) => <button type="button" key={section.id} aria-pressed={peerSection === section.id} className={peerSection === section.id ? "active" : ""} onClick={() => setPeerSection(section.id)}>{section.label}</button>)}
       </nav>
+      <label>Review group<select value={batchFilter} onChange={(event) => setBatchFilter(event.target.value)}><option value="all">All batches</option>{batches.map((batch) => <option value={batch.id} key={batch.id}>{batch.name} · {formatDate(batch.review_deadline)}</option>)}</select></label>
       <section hidden={peerSection !== "assignments"} className="peer-coverage-list peer-section">
-        <strong>Ready for this batch: {readyChapters.length} authors</strong>
-        {readyChapters.map((chapter) => <p key={chapter.id}>{chapter.profiles?.full_name || chapter.profiles?.email || "Author"} · {chapter.title}</p>)}
-        <p className="muted">{chapters.length - readyChapters.length} chapters excluded until their first draft is submitted and anonymised copy approved.</p>
+        <ReviewBatchBuilder bookId={book.id} chapters={unassignedChapters} onCreated={setBatchFilter} />
       </section>
       <section hidden={peerSection !== "progress"} className="table-panel peer-section">
         <h3>Reviewer progress</h3>
@@ -1378,37 +1424,19 @@ function PeerReviewAdminPanel({
         {selectedChapter ? <AnonymisedReviewCopyForm book={book} chapter={selectedChapter} /> : null}
       </div>
       <div hidden={peerSection !== "assignments"} className="peer-admin-actions peer-section">
-        <form
-          action={generatePeerReviewAssignments}
-          onSubmit={(event) => {
-            const submitter = (event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null;
-            const isEmailAction = submitter?.value === "notify";
-            const message = isEmailAction
-              ? "This will create peer review assignments and immediately email all assigned reviewers. Are you sure you want to continue?"
-              : "This will create peer review assignments. Are you sure you want to continue?";
-            if (!window.confirm(message)) event.preventDefault();
-          }}
-        >
+        <form action={emailAction} onSubmit={(event) => { if (!window.confirm("Send invitations only to unnotified reviewers in this batch?")) event.preventDefault(); }}>
           <input type="hidden" name="book_id" value={book.id} />
-          <div className="warning-box">
-            <strong>Before generating assignments</strong>
-            <p>This batch includes only the {readyChapters.length} ready authors listed above. The email option immediately emails outstanding, unnotified assignments in this group.</p>
-            <label className="check-row">
-              <input type="checkbox" checked={assignmentConfirmed} onChange={(event) => setAssignmentConfirmed(event.target.checked)} />
-              <span>I understand and want to generate peer review assignments.</span>
-            </label>
-          </div>
-          <button disabled={!canGenerate || !assignmentConfirmed} type="submit" name="_action" value="save">Generate assignments</button>
-          <button className="primary" disabled={!canGenerate || !assignmentConfirmed} type="submit" name="_action" value="notify">Generate and email reviewers</button>
+          <input type="hidden" name="batch_id" value={activeBatch?.id ?? ""} />
+          <input type="hidden" name="_action" value="notify" />
+          <p className="muted">Choose a review group above to email its invitations. Other batches are not contacted.</p>
+          <button className="primary" disabled={!activeBatch || emailPending || !settings?.is_open} type="submit">{emailPending ? "Sending invitations..." : "Send batch invitations"}</button>
+          {emailState.error ? <p role="alert">{emailState.error}</p> : null}
+          {emailState.success ? <p role="status">Batch invitations sent. Already-notified assignments were skipped.</p> : null}
         </form>
-        {!canGenerate ? <p className="muted">At least {requiredReviewCount + 1} submitted first drafts with approved anonymised copies are needed for this batch.</p> : null}
         <form action={sendPeerReviewReminders}>
           <input type="hidden" name="book_id" value={book.id} />
-          <button disabled={!incompleteAssignments.length} type="submit">Send late review reminders</button>
-        </form>
-        <form action={resetPeerReviewProcess}>
-          <input type="hidden" name="book_id" value={book.id} />
-          <button className="danger-button" type="submit">Close peer review and clear assignments</button>
+          <input type="hidden" name="batch_id" value={activeBatch?.id ?? ""} />
+          <button disabled={!activeBatch || !incompleteAssignments.length} type="submit">Send late reminders for selected batch</button>
         </form>
       </div>
       <div hidden={peerSection !== "progress"} className="peer-coverage-list peer-section">
@@ -1421,12 +1449,12 @@ function PeerReviewAdminPanel({
         )) : <p className="muted">Approved chapters will appear here when they are ready for peer review.</p>}
       </div>
       <section hidden={peerSection !== "feedback"} className="peer-section peer-feedback-section">
-        <label>Chapter<select value={selectedChapter?.id ?? ""} onChange={(event) => setSelectedChapterId(event.target.value)}>{chapters.map((chapter) => <option key={chapter.id} value={chapter.id}>{chapter.title}</option>)}</select></label>
-        {selectedChapter ? <PeerReviewPacketEditor key={selectedChapter.id} chapter={selectedChapter} assignments={selectedAssignments} requiredReviewCount={requiredReviewCount} /> : <p className="muted">No chapters are available yet.</p>}
+        <label>Chapter<select value={packetChapter?.id ?? ""} onChange={(event) => setSelectedChapterId(event.target.value)}>{feedbackChapters.map((chapter) => <option key={chapter.id} value={chapter.id}>{chapter.title}</option>)}</select></label>
+        {packetChapter ? <PeerReviewPacketEditor key={packetChapter.id} chapter={packetChapter} assignments={assignments.filter((assignment) => assignment.chapter_id === packetChapter.id)} requiredReviewCount={requiredReviewCount} /> : <p className="muted">No chapters are available yet.</p>}
       </section>
       <div hidden={peerSection !== "assignments"} className="email-draft peer-section">
         <strong>Assignment email template</strong>
-        <p>When you choose “Generate and email reviewers”, each reviewer receives their assigned chapters, the review deadline, your reviewer guidance, and a link back to ChapterFlow.</p>
+        <p>Batch invitations include the assigned chapters, the batch deadline, reviewer guidance and a link to ChapterFlow.</p>
         <strong>Late reminder template</strong>
         <p>The reminder asks reviewers to complete outstanding reviews, names the assigned chapter, repeats the deadline, and invites them to contact the editorial team if there is a problem.</p>
       </div>

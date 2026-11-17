@@ -976,6 +976,34 @@ async function persistPeerReviewSettings(formData: FormData) {
   return verified.is_open;
 }
 
+export async function createPeerReviewBatch(_previous: { success: boolean; error: string; batchId: string }, formData: FormData) {
+  try {
+    const { supabase } = await getSignedInProfile();
+    await requireProjectEditor(supabase, formData);
+    const { data, error } = await supabase.rpc("create_peer_review_batch", {
+      p_book_id: textValue(formData, "book_id"),
+      p_name: textValue(formData, "batch_name"),
+      p_chapter_ids: formValues(formData, "chapter_ids"),
+      p_deadline: optionalDate(formData, "batch_deadline"),
+      p_count: Number(textValue(formData, "batch_review_count"))
+    });
+    if (error || !data) throw new Error(error?.message ?? "The batch could not be created.");
+    revalidatePath("/");
+    return { success: true, error: "", batchId: String(data) };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : "The batch could not be created.", batchId: "" };
+  }
+}
+
+export async function sendPeerReviewBatchEmails(_previous: { success: boolean; error: string }, formData: FormData) {
+  try {
+    await generatePeerReviewAssignments(formData);
+    return { success: true, error: "" };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : "The invitations could not be sent." };
+  }
+}
+
 export async function generatePeerReviewAssignments(formData: FormData) {
   const { supabase, user, profile } = await getSignedInProfile();
 
@@ -1005,55 +1033,26 @@ export async function generatePeerReviewAssignments(formData: FormData) {
     .from("chapters")
     .select("id, title, author_id, stage, status, profiles:author_id(full_name, email), submissions(stage, submission_files(id)), peer_review_files(id, status)")
     .eq("book_id", bookId)
-    .in("status", ["approved", "submitted", "complete"])
     .order("created_at", { ascending: true });
 
   if (chapterError) {
     throw new Error(chapterError.message);
   }
 
-  const eligibleChapters = (chapters ?? []).filter((chapter) =>
-    chapter.author_id && chapter.status === "submitted" && chapter.stage === "first_draft" &&
-    (chapter.submissions ?? []).some((submission) => submission.stage === "first_draft" && submission.submission_files.length > 0) &&
-    (chapter.peer_review_files ?? []).some((file) => file.status === "approved")
-  );
-
-  const requiredReviewCount = Math.min(3, Math.max(2, Number(settings?.required_review_count) || 2));
-
-  if (eligibleChapters.length < requiredReviewCount + 1) {
-    throw new Error(`At least ${requiredReviewCount + 1} submitted first drafts with approved anonymised copies are needed for this batch.`);
-  }
-
-  const { data: existing, error: existingError } = await supabase.from("peer_review_assignments").select("id, chapter_id, reviewer_id, notified_at, status").eq("book_id", bookId);
-  if (existingError) throw new Error(existingError.message);
-  if (new Set(eligibleChapters.map((chapter) => chapter.author_id)).size !== eligibleChapters.length) throw new Error("This batch requires one chapter per author. Please separate issues or duplicate author entries before assigning reviews.");
-
-  const assignments = eligibleChapters.flatMap((chapter, index) => {
-    const current = (existing ?? []).filter((assignment) => assignment.chapter_id === chapter.id);
-    const reviewerChapters = Array.from({ length: eligibleChapters.length - 1 }, (_, offset) => eligibleChapters[(index + offset + 1) % eligibleChapters.length])
-      .filter((candidate) => !current.some((assignment) => assignment.reviewer_id === candidate.author_id))
-      .slice(0, Math.max(0, requiredReviewCount - current.length));
-    return reviewerChapters.map((reviewerChapter) => ({
-      book_id: bookId,
-      chapter_id: chapter.id,
-      reviewer_id: reviewerChapter.author_id,
-      assigned_by: user.id,
-      status: "assigned",
-      notified_at: null
-    }));
-  });
-
-  const { error: assignmentError } = assignments.length ? await supabase.from("peer_review_assignments").upsert(assignments, { onConflict: "chapter_id,reviewer_id", ignoreDuplicates: true }) : { error: null };
-
-  if (assignmentError) {
-    throw new Error(assignmentError.message);
-  }
+  const batchId = textValue(formData, "batch_id");
+  const { data: batch, error: batchError } = await supabase.from("peer_review_batches").select("id, name, review_deadline").eq("id", batchId).eq("book_id", bookId).single();
+  if (batchError || !batch) throw new Error("Select an existing review batch before sending invitations.");
+  const { data: batchAssignments, error: batchAssignmentsError } = await supabase.from("peer_review_assignments").select("chapter_id").eq("book_id", bookId).eq("batch_id", batchId);
+  if (batchAssignmentsError) throw new Error(batchAssignmentsError.message);
+  const eligibleChapters = (chapters ?? []).filter((chapter) => (batchAssignments ?? []).some((assignment) => assignment.chapter_id === chapter.id));
+  if (!eligibleChapters.length) throw new Error("This batch has no assignments.");
+  if (shouldNotify && !settings?.is_open) throw new Error("Open peer review in Settings before emailing reviewers.");
 
   if (shouldNotify) {
     const siteUrl = getSiteUrl();
     const assignmentsByReviewer = new Map<string, { email: string; name: string; chapters: string[] }>();
 
-    const { data: unsent, error: unsentError } = await supabase.from("peer_review_assignments").select("id, chapter_id, reviewer_id").eq("book_id", bookId).is("notified_at", null).neq("status", "completed");
+    const { data: unsent, error: unsentError } = await supabase.from("peer_review_assignments").select("id, chapter_id, reviewer_id").eq("book_id", bookId).eq("batch_id", batchId).is("notified_at", null).neq("status", "completed");
     if (unsentError) throw new Error(unsentError.message);
     eligibleChapters.forEach((chapter) => {
       const reviewerChapters = eligibleChapters.filter((candidate) => (unsent ?? []).some((assignment) => assignment.chapter_id === chapter.id && assignment.reviewer_id === candidate.author_id));
@@ -1081,7 +1080,7 @@ export async function generatePeerReviewAssignments(formData: FormData) {
         `You have ${reviewer.chapters.length} new or previously unnotified chapter${reviewer.chapters.length === 1 ? "" : "s"} to review:`,
         chapterList,
         "",
-        `Please complete your reviews by ${formatDate(settings?.review_deadline)}.`,
+        `Please complete your reviews by ${formatDate(batch.review_deadline)}.`,
         "",
         "The review process is guided in ChapterFlow. You will be asked to comment on structure, alignment with Mission Integrity, clarity of the story, practical value for school leaders, use of evidence, and recommended improvements.",
         "",
@@ -1096,7 +1095,7 @@ export async function generatePeerReviewAssignments(formData: FormData) {
         <p>The blind peer review stage for <strong>${escapeHtml(book?.title ?? "the edited book project")}</strong> is now open.</p>
         <p>You have ${reviewer.chapters.length} new or previously unnotified chapter${reviewer.chapters.length === 1 ? "" : "s"} to review:</p>
         <ol>${reviewer.chapters.map((title) => `<li>${escapeHtml(title)}</li>`).join("")}</ol>
-        <p>Please complete your reviews by <strong>${formatDate(settings?.review_deadline)}</strong>.</p>
+        <p>Please complete your reviews by <strong>${formatDate(batch.review_deadline)}</strong>.</p>
         <p>The review process is guided in ChapterFlow. You will be asked to comment on structure, alignment with Mission Integrity, clarity of the story, practical value for school leaders, use of evidence, and recommended improvements.</p>
         ${settings?.instructions ? `<p><strong>Additional guidance:</strong><br />${escapeHtml(settings.instructions)}</p>` : ""}
         <p><a href="${siteUrl}">Sign in to ChapterFlow</a></p>
@@ -1377,16 +1376,15 @@ export async function sendPeerReviewReminders(formData: FormData) {
     throw new Error("Choose a book project before sending reminders.");
   }
 
-  const { data: settings } = await supabase
-    .from("peer_review_settings")
-    .select("review_deadline")
-    .eq("book_id", bookId)
-    .maybeSingle();
+  const batchId = textValue(formData, "batch_id");
+  const { data: settings, error: batchError } = await supabase.from("peer_review_batches").select("review_deadline").eq("id", batchId).eq("book_id", bookId).single();
+  if (batchError || !settings) throw new Error("Select a review batch before sending reminders.");
   const { data: book } = await supabase.from("books").select("title").eq("id", bookId).single();
   const { data: assignments, error } = await supabase
     .from("peer_review_assignments")
     .select("id, reviewer_id, profiles:reviewer_id(full_name, email), chapters:chapter_id(title)")
     .eq("book_id", bookId)
+    .eq("batch_id", batchId)
     .neq("status", "completed");
 
   if (error) {
