@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { draftWorkflow } from "@/lib/draft-workflow";
 
 type ReviewDecision = "approved" | "revision_requested" | "rejected";
 
@@ -165,7 +166,8 @@ async function saveDraftUpload({
   chapterTitle,
   responseToFeedback,
   file,
-  fileName
+  fileName,
+  draftStage
 }: {
   supabase: Awaited<ReturnType<typeof createClient>>;
   bookId: string;
@@ -175,10 +177,11 @@ async function saveDraftUpload({
   responseToFeedback: string;
   file: File;
   fileName: string;
+  draftStage: "first_draft" | "second_draft";
 }) {
   const { data: book } = await supabase
     .from("books")
-    .select("second_draft_deadline")
+    .select("second_draft_deadline, final_materials_deadline")
     .eq("id", bookId)
     .maybeSingle();
 
@@ -187,7 +190,7 @@ async function saveDraftUpload({
     .insert({
       chapter_id: chapterId,
       submitted_by: authorId,
-      stage: "first_draft",
+      stage: draftStage,
       title: chapterTitle,
       response_to_feedback: responseToFeedback
     })
@@ -208,6 +211,7 @@ async function saveDraftUpload({
     });
 
   if (uploadError) {
+    await supabase.from("submissions").delete().eq("id", submission.id);
     throw new Error(uploadError.message);
   }
 
@@ -220,15 +224,17 @@ async function saveDraftUpload({
   });
 
   if (fileError) {
+    await supabase.storage.from("chapter-drafts").remove([storagePath]);
+    await supabase.from("submissions").delete().eq("id", submission.id);
     throw new Error(fileError.message);
   }
 
   const { error: updateError } = await supabase
     .from("chapters")
     .update({
-      stage: "first_draft",
+      stage: draftStage,
       status: "submitted",
-      current_deadline: book?.second_draft_deadline ?? null,
+      current_deadline: draftStage === "second_draft" ? book?.final_materials_deadline ?? null : book?.second_draft_deadline ?? null,
       updated_at: new Date().toISOString()
     })
     .eq("id", chapterId);
@@ -488,7 +494,16 @@ export async function submitProposal(formData: FormData) {
   revalidatePath("/");
 }
 
-export async function uploadDraftManuscript(formData: FormData) {
+export async function uploadDraftManuscript(_previous: { success: boolean; error: string; stage: string }, formData: FormData) {
+  try {
+    const stage = await persistAuthorDraft(formData);
+    return { success: true, error: "", stage };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : "The draft could not be uploaded.", stage: "" };
+  }
+}
+
+async function persistAuthorDraft(formData: FormData) {
   const { supabase, user } = await getSignedInProfile();
 
   const bookId = textValue(formData, "book_id");
@@ -502,7 +517,7 @@ export async function uploadDraftManuscript(formData: FormData) {
 
   const { data: chapter, error: chapterError } = await supabase
     .from("chapters")
-    .select("id, title, author_id")
+    .select("id, title, author_id, stage, status, submissions(stage, submission_files(id)), peer_review_feedback_packets(status)")
     .eq("id", chapterId)
     .eq("book_id", bookId)
     .eq("author_id", user.id)
@@ -511,6 +526,10 @@ export async function uploadDraftManuscript(formData: FormData) {
   if (chapterError || !chapter) {
     throw new Error("This chapter could not be found for your account.");
   }
+  const workflow = draftWorkflow(chapter);
+  if (!workflow.canUpload) throw new Error("Draft upload is not open for this chapter. Please contact the editor.");
+  const draftStage = textValue(formData, "draft_stage");
+  if (draftStage !== workflow.uploadStage) throw new Error("Your draft stage has changed. Refresh the page before uploading.");
 
   await saveDraftUpload({
     supabase,
@@ -520,10 +539,12 @@ export async function uploadDraftManuscript(formData: FormData) {
     chapterTitle: chapter.title,
     responseToFeedback,
     file,
-    fileName
+    fileName,
+    draftStage
   });
 
   revalidatePath("/");
+  return draftStage;
 }
 
 export async function adminUploadDraftManuscript(formData: FormData) {
@@ -537,6 +558,7 @@ export async function adminUploadDraftManuscript(formData: FormData) {
   const bookId = textValue(formData, "book_id");
   const chapterId = textValue(formData, "chapter_id");
   const responseToFeedback = textValue(formData, "response_to_feedback");
+  const draftStage = textValue(formData, "draft_stage") === "second_draft" ? "second_draft" : "first_draft";
   const { file, fileName } = getDraftFile(formData);
 
   if (!bookId || !chapterId) {
@@ -562,9 +584,22 @@ export async function adminUploadDraftManuscript(formData: FormData) {
     chapterTitle: chapter.title,
     responseToFeedback,
     file,
-    fileName
+    fileName,
+    draftStage
   });
 
+  revalidatePath("/");
+}
+
+export async function selectEditorialDraft(formData: FormData) {
+  const { supabase } = await getSignedInProfile();
+  await requireProjectEditor(supabase, formData);
+  const chapterId = textValue(formData, "chapter_id");
+  const submissionId = textValue(formData, "submission_id");
+  const { data: submission } = await supabase.from("submissions").select("id, submission_files(id)").eq("id", submissionId).eq("chapter_id", chapterId).eq("stage", "second_draft").single();
+  if (!submission?.submission_files?.length) throw new Error("Select an uploaded second draft belonging to this chapter.");
+  const { data: saved, error } = await supabase.from("chapters").update({ editorial_submission_id: submissionId, stage: "second_draft", status: "submitted", updated_at: new Date().toISOString() }).eq("id", chapterId).select("editorial_submission_id").single();
+  if (error || saved?.editorial_submission_id !== submissionId) throw new Error(error?.message ?? "The editorial draft selection could not be verified.");
   revalidatePath("/");
 }
 

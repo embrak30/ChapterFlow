@@ -48,7 +48,7 @@ export default async function Home() {
 
   const { data: chapters } = await supabase
     .from("chapters")
-    .select("*, profiles:author_id(full_name, email), submissions(*, submission_files(*)), reviews(*), peer_review_files(*)")
+    .select("*, profiles:author_id(full_name, email), submissions(*, submission_files(*)), reviews(*), peer_review_files(*), peer_review_feedback_packets(id, status, sent_at, body)")
     .order("created_at", { ascending: false });
   const { data: peerReviewSettings, error: peerReviewSettingsError } = await supabase
     .from("peer_review_settings")

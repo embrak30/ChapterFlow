@@ -5,6 +5,8 @@ import { useFormStatus } from "react-dom";
 import { acceptAuthorAgreement, adminUploadDraftManuscript, generatePeerReviewAssignments, resetPeerReviewProcess, reviewProposal, saveCallSettings, savePeerReviewSettings, saveProjectAgreement, sendBulkAuthorEmail, sendPeerReviewFeedbackPacket, sendPeerReviewReminders, submitPeerReview, submitProposal, uploadAnonymisedReviewCopy, uploadDraftManuscript } from "@/app/actions";
 import { AuthButtons } from "@/components/auth-buttons";
 import { workflowStages } from "@/lib/sample-data";
+import { draftWorkflow } from "@/lib/draft-workflow";
+import { selectEditorialDraft } from "@/app/actions";
 import { AnonymisationEditor } from "@/components/anonymisation-editor";
 import { previewReviewBatch } from "@/lib/review-batch";
 import { createPeerReviewBatch, sendPeerReviewBatchEmails } from "@/app/actions";
@@ -73,6 +75,8 @@ type ReviewRecord = {
 };
 
 type ChapterRecord = {
+  editorial_submission_id?: string | null;
+  peer_review_feedback_packets?: { id: string; status: string; sent_at: string | null; body: string }[];
   author_id?: string;
   issue_id?: string | null;
   id: string;
@@ -362,9 +366,9 @@ function singleRecord<T>(value?: T | T[] | null) {
   return Array.isArray(value) ? value[0] : value;
 }
 
-function latestDraftSubmission(chapter?: ChapterRecord | null) {
+function latestDraftSubmission(chapter?: ChapterRecord | null, stage?: string) {
   return [...(chapter?.submissions ?? [])]
-    .filter((submission) => submission.stage.includes("draft"))
+    .filter((submission) => stage ? submission.stage === stage : submission.stage.includes("draft"))
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
 }
 
@@ -676,16 +680,19 @@ function AuthorView({
   peerReviewSettings?: PeerReviewSettingsRecord;
   peerReviewAssignments: PeerReviewAssignmentRecord[];
 }) {
-  const proposalApproved = chapter?.status === "approved" || chapter?.stage === "first_draft";
+  const workflow = draftWorkflow(chapter);
+  const proposalApproved = Boolean(chapter && (chapter.status === "approved" || !chapter.stage.includes("proposal")));
+  const [uploadState, uploadAction] = useActionState(uploadDraftManuscript, { success: false, error: "", stage: "" });
+  const draftLabel = workflow.uploadStage === "second_draft" ? "Second draft" : "First draft";
   const hasProposal = Boolean(chapter);
   const submissions = [...(chapter?.submissions ?? [])].sort(
     (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   );
   const hasDraftFile = submissions.some((submission) => (submission.submission_files ?? []).length > 0);
-  const [authorTab, setAuthorTab] = useState(hasDraftFile ? "records" : proposalApproved ? "draft" : "proposal");
+  const [authorTab, setAuthorTab] = useState(workflow.secondOpen && !workflow.secondDraft ? "draft" : hasDraftFile ? "records" : proposalApproved ? "draft" : "proposal");
   const authorTabs = [
     { id: "proposal", label: "Proposal", detail: hasProposal ? displayStatus(chapter?.status ?? "pending_review") : "Not submitted" },
-    { id: "draft", label: "Draft upload", detail: hasDraftFile ? "Uploaded" : proposalApproved ? "Ready to upload" : "Awaiting approval" },
+    { id: "draft", label: "Draft upload", detail: workflow.secondDraft ? "Second draft submitted" : workflow.secondOpen ? "Second draft ready to upload" : hasDraftFile ? "First draft submitted" : proposalApproved ? "Ready to upload" : "Awaiting approval" },
     { id: "records", label: "Work & feedback", detail: `${submissions.length} submissions · ${chapter?.reviews?.length ?? 0} decisions` },
     { id: "agreement", label: "Agreement", detail: agreementAcceptance ? "Signed" : agreement?.is_active && hasDraftFile ? "Action required" : "Not yet open" },
     ...(peerReviewSettings?.is_open ? [{ id: "reviews", label: "Peer review", detail: "Open assignments" }] : [])
@@ -734,20 +741,24 @@ function AuthorView({
           )}
         </section>
         <section className="panel draft-panel">
-          <div className="section-heading"><p className="eyebrow">Next stage</p><h2>First draft manuscript</h2></div>
-          {proposalApproved ? (
-            <form action={uploadDraftManuscript} className="draft-upload-form">
+          <div className="section-heading"><p className="eyebrow">Manuscript upload</p><h2>{draftLabel} manuscript</h2></div>
+          {workflow.canUpload ? (
+            <form action={uploadAction} className="draft-upload-form">
               <input type="hidden" name="book_id" value={book.id} />
               <input type="hidden" name="chapter_id" value={chapter?.id ?? ""} />
-              <p className="muted">{hasDraftFile ? "You can upload a newer version if the editor has asked for an updated first draft." : "Upload your first draft manuscript as a Microsoft Word document."}</p>
+              <input type="hidden" name="draft_stage" value={workflow.uploadStage} />
+              <p className="muted">{workflow.secondOpen ? "Upload your revised second draft and describe how you addressed the reviews. Your first draft remains in your submission history." : hasDraftFile ? "You can upload a newer version if the editor has asked for an updated first draft." : "Upload your first draft manuscript as a Microsoft Word document."}</p>
+              {workflow.secondOpen ? <p className="muted">Second draft deadline: {formatDate(book.second_draft_deadline)}</p> : null}
               <label>Word manuscript<input name="manuscript" type="file" accept=".doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" required /></label>
               <label>Notes or response to feedback<textarea name="response_to_feedback" placeholder="Optional: tell the editor what you have changed, or add any context for this draft." /></label>
-              <DraftUploadButton hasDraftFile={hasDraftFile} />
+              <DraftUploadButton stage={workflow.uploadStage} hasDraftFile={workflow.secondOpen ? workflow.secondDraft : hasDraftFile} />
+              {uploadState.error ? <p role="alert">{uploadState.error}</p> : null}
+              {uploadState.success ? <p className="notice" role="status">{displayStatus(uploadState.stage)} saved successfully. Earlier versions have been kept.</p> : null}
             </form>
           ) : (
             <div className="empty-state">
-              <h2>Locked until proposal approval</h2>
-              <p className="muted">You will be able to upload your Word manuscript here once your proposal has been approved.</p>
+              <h2>{proposalApproved ? "Upload closed for this stage" : "Locked until proposal approval"}</h2>
+              <p className="muted">{proposalApproved ? "Contact the editor if you need to submit another revision." : "You will be able to upload your Word manuscript here once your proposal has been approved."}</p>
             </div>
           )}
         </section>
@@ -758,6 +769,7 @@ function AuthorView({
             <p className="muted">This is the work ChapterFlow currently has recorded against your author profile.</p>
           </div>
           <ReviewHistory reviews={chapter?.reviews ?? []} />
+          {(chapter?.peer_review_feedback_packets ?? []).filter((packet) => packet.status === "sent").map((packet) => <details className="received-review-text" key={packet.id}><summary>Peer review feedback · {formatDate(packet.sent_at)}</summary><pre>{packet.body}</pre></details>)}
           {submissions.length ? (
             <div className="submission-list">
               {submissions.map((submission) => (
@@ -769,6 +781,7 @@ function AuthorView({
                     </div>
                     <span>{formatDate(submission.created_at)}</span>
                   </div>
+                  {submission.id === chapter?.editorial_submission_id ? <span className="pill approved">Selected for editorial review</span> : null}
                   {submission.abstract ? <p><strong>Overview</strong>{submission.abstract}</p> : null}
                   {submission.proposal_outline ? <p><strong>Proposal</strong>{submission.proposal_outline}</p> : null}
                   {submission.response_to_feedback ? <p><strong>Response to feedback</strong>{submission.response_to_feedback}</p> : null}
@@ -952,9 +965,9 @@ function PeerReviewAuthorPanel({
   );
 }
 
-function DraftUploadButton({ hasDraftFile }: { hasDraftFile: boolean }) {
+function DraftUploadButton({ hasDraftFile, stage = "first_draft" }: { hasDraftFile: boolean; stage?: string }) {
   const { pending } = useFormStatus();
-  return <button className="primary" disabled={pending} type="submit">{pending ? "Uploading draft..." : hasDraftFile ? "Upload updated draft" : "Upload first draft"}</button>;
+  return <button className="primary" disabled={pending} type="submit">{pending ? "Uploading draft..." : hasDraftFile ? "Upload updated draft" : stage === "second_draft" ? "Upload second draft" : "Upload first draft"}</button>;
 }
 
 function PeerReviewAssignmentSummary({
@@ -1464,7 +1477,7 @@ function PeerReviewAdminPanel({
 
 function AnonymisedReviewCopyForm({ book, chapter }: { book: BookRecord; chapter: ChapterRecord }) {
   const reviewCopy = latestApprovedReviewCopy(chapter);
-  const originalDraft = latestDraftSubmission(chapter);
+  const originalDraft = latestDraftSubmission(chapter, "first_draft");
 
   return (
     <form action={uploadAnonymisedReviewCopy} className="peer-review-copy-form">
@@ -1678,10 +1691,10 @@ function ReviewWorkspace({
             <div className="section-heading"><p className="eyebrow">Proposal review</p><h2>{selected.title}</h2></div>
             <div className="meta-list"><p><strong>Author</strong>{selected.profiles?.full_name || selected.profiles?.email || "Author"}</p><p><strong>Current stage</strong>{displayStatus(selected.stage)}</p><p><strong>Deadline</strong>{formatDate(selected.current_deadline)}</p></div>
             <div className="document-preview"><span>Story proposal</span><p>{selected.proposal_outline || selected.abstract || "No proposal text supplied."}</p></div>
-            {canDecide ? <AdminDraftUploadForm book={book} chapter={selected} /> : null}
-            <ChapterDraftFiles chapter={selected} />
+            {canDecide ? <AdminDraftUploadForm key={selected.id} book={book} chapter={selected} /> : null}
+            <ChapterDraftFiles chapter={selected} canSelect={canDecide} />
             <ReviewHistory reviews={selected.reviews ?? []} />
-            {canDecide ? <ReviewForm book={book} chapter={selected} /> : null}
+            {canDecide && selected.stage.includes("proposal") ? <ReviewForm key={selected.id} book={book} chapter={selected} /> : null}
           </>
         ) : (
           <EmptyState title="No proposal selected" message="Once authors submit proposals, you will be able to review them here." />
@@ -1698,6 +1711,7 @@ function AdminDraftUploadForm({ book, chapter }: { book: BookRecord; chapter: Ch
       <p className="muted">Use this if the author sends you their Word file by email or cannot upload it themselves. The draft will appear on their author profile.</p>
       <input type="hidden" name="book_id" value={book.id} />
       <input type="hidden" name="chapter_id" value={chapter.id} />
+      <label>Draft stage<select name="draft_stage" defaultValue={draftWorkflow(chapter).uploadStage}><option value="first_draft">First draft</option><option value="second_draft">Second draft (revised after reviews)</option></select></label>
       <label>Word manuscript<input name="manuscript" type="file" accept=".doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" required /></label>
       <label>Admin note<textarea name="response_to_feedback" placeholder="Optional: add a note such as 'Uploaded by admin on behalf of author after email submission.'" /></label>
       <DraftUploadButton hasDraftFile={Boolean(latestDraftSubmission(chapter)?.submission_files?.length)} />
@@ -1705,7 +1719,7 @@ function AdminDraftUploadForm({ book, chapter }: { book: BookRecord; chapter: Ch
   );
 }
 
-function ChapterDraftFiles({ chapter }: { chapter: ChapterRecord }) {
+function ChapterDraftFiles({ chapter, canSelect = false }: { chapter: ChapterRecord; canSelect?: boolean }) {
   const draftSubmissions = [...(chapter.submissions ?? [])]
     .filter((submission) => submission.stage.includes("draft") || (submission.submission_files ?? []).length)
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
@@ -1716,6 +1730,7 @@ function ChapterDraftFiles({ chapter }: { chapter: ChapterRecord }) {
       {draftSubmissions.length ? draftSubmissions.map((submission) => (
         <div className="review-note" key={submission.id}>
           <small>{displayStatus(submission.stage)} · {formatDate(submission.created_at)}</small>
+          {submission.id === chapter.editorial_submission_id ? <span className="pill approved">Selected for editorial review</span> : submission.stage === "second_draft" && canSelect && submission.submission_files?.length ? <form action={selectEditorialDraft}><input type="hidden" name="book_id" value={chapter.book_id} /><input type="hidden" name="chapter_id" value={chapter.id} /><input type="hidden" name="submission_id" value={submission.id} /><button type="submit">Use this second draft for editorial review</button></form> : null}
           {submission.response_to_feedback ? <p>{submission.response_to_feedback}</p> : null}
           {(submission.submission_files ?? []).length ? (
             <div className="file-list">
