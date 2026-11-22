@@ -48,7 +48,7 @@ export default async function Home() {
 
   const { data: chapters, error: chaptersError } = await supabase
     .from("chapters")
-    .select("*, profiles:author_id(full_name, email), submissions(*, submission_files(*)), reviews(*), peer_review_files(*), peer_review_feedback_packets(id, status, sent_at, body, included_review_ids), chapter_production(*), email_logs(id, subject, status, sent_at, email_kind)")
+    .select("*, profiles:author_id(full_name, email), submissions!submissions_chapter_id_fkey(*, submission_files(*)), reviews(*), peer_review_files(*), peer_review_feedback_packets(id, status, sent_at, body, included_review_ids), chapter_production(*), email_logs(id, subject, status, sent_at, email_kind)")
     .order("created_at", { ascending: false });
   const { data: peerReviewSettings, error: peerReviewSettingsError } = await supabase
     .from("peer_review_settings")
@@ -56,7 +56,7 @@ export default async function Home() {
     .order("created_at", { ascending: true });
   const { data: peerReviewAssignments, error: peerReviewAssignmentsError } = await supabase
     .from("peer_review_assignments")
-    .select("*, batch:batch_id(id, name, review_deadline), reviewer:reviewer_id(full_name, email), chapter:chapter_id(id, book_id, title, abstract, proposal_outline, stage, status, current_deadline, created_at, profiles:author_id(full_name, email), submissions(*, submission_files(*)), peer_review_files(*)), peer_reviews(*)")
+    .select("*, batch:batch_id(id, name, review_deadline), reviewer:reviewer_id(full_name, email), chapter:chapter_id(id, book_id, title, abstract, proposal_outline, stage, status, current_deadline, created_at, profiles:author_id(full_name, email), submissions!submissions_chapter_id_fkey(*, submission_files(*)), peer_review_files(*)), peer_reviews(*)")
     .order("created_at", { ascending: true });
   const { data: bookAgreements } = await supabase
     .from("book_agreements")

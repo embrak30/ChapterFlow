@@ -517,7 +517,7 @@ async function persistAuthorDraft(formData: FormData) {
 
   const { data: chapter, error: chapterError } = await supabase
     .from("chapters")
-    .select("id, title, author_id, stage, status, submissions(stage, submission_files(id)), peer_review_feedback_packets(status), chapter_production(third_draft_requested_at, editorial_state)")
+    .select("id, title, author_id, stage, status, submissions!submissions_chapter_id_fkey(stage, submission_files(id)), peer_review_feedback_packets(status), chapter_production(third_draft_requested_at, editorial_state)")
     .eq("id", chapterId)
     .eq("book_id", bookId)
     .eq("author_id", user.id)
@@ -611,7 +611,7 @@ export async function saveChapterProduction(_previous: { success: boolean; error
     const chapterId = textValue(formData, "chapter_id");
     const mode = textValue(formData, "mode");
     if (!["save","revision","materials","agreement"].includes(mode)) throw new Error("Choose an editorial action.");
-    const { data: chapter } = await supabase.from("chapters").select("id, title, book_id, editorial_submission_id, profiles:author_id(full_name,email), submissions(stage,submission_files(id))").eq("id",chapterId).single();
+    const { data: chapter } = await supabase.from("chapters").select("id, title, book_id, editorial_submission_id, profiles:author_id(full_name,email), submissions!submissions_chapter_id_fkey(stage,submission_files(id))").eq("id",chapterId).single();
     if (!chapter) throw new Error("The chapter was not found.");
     const state = mode==='revision' ? 'revision_requested' : textValue(formData,"editorial_state");
     const notes = textValue(formData,"editorial_notes");
@@ -896,7 +896,7 @@ export async function sendBulkAuthorEmail(formData: FormData) {
 
   const { data: chapters, error: chaptersError } = await supabase
     .from("chapters")
-    .select("id, title, status, stage, current_deadline, profiles:author_id(full_name, email), submissions(stage, submission_files(id))")
+    .select("id, title, status, stage, current_deadline, profiles:author_id(full_name, email), submissions!submissions_chapter_id_fkey(stage, submission_files(id))")
     .eq("book_id", bookId)
     .order("created_at", { ascending: true });
 
@@ -1117,7 +1117,7 @@ export async function generatePeerReviewAssignments(formData: FormData) {
     .maybeSingle();
   const { data: chapters, error: chapterError } = await supabase
     .from("chapters")
-    .select("id, title, author_id, stage, status, profiles:author_id(full_name, email), submissions(stage, submission_files(id)), peer_review_files(id, status)")
+    .select("id, title, author_id, stage, status, profiles:author_id(full_name, email), submissions!submissions_chapter_id_fkey(stage, submission_files(id)), peer_review_files(id, status)")
     .eq("book_id", bookId)
     .order("created_at", { ascending: true });
 
