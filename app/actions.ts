@@ -1,5 +1,7 @@
 "use server";
 
+import { hasSubmittedSecondDraft } from '@/lib/second-draft-recipients';
+
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { canEditProposal, draftWorkflow } from "@/lib/draft-workflow";
@@ -908,6 +910,7 @@ export async function sendBulkAuthorEmail(formData: FormData) {
 
   const recipients = (chapters ?? [])
     .filter((chapter) => {
+      if (audience === "second_drafts") return chapter.status !== "rejected" && hasSubmittedSecondDraft(chapter);
       if (audience === "awaiting_first_draft" || ["One week to go - first draft not submitted", "First draft overdue - one-week extension", "First draft reminder - November 15 deadline"].includes(emailTemplateName)) {
         const hasDraft = (chapter.submissions ?? []).some((submission) => submission.stage.includes("draft") && (submission.submission_files ?? []).length > 0);
         return chapter.status === "approved" && chapter.stage === "first_draft" && !hasDraft;

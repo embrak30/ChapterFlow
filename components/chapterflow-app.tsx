@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
+import { hasSubmittedSecondDraft } from "@/lib/second-draft-recipients";
 import { acceptAuthorAgreement, adminUploadDraftManuscript, generatePeerReviewAssignments, resetPeerReviewProcess, reviewProposal, saveCallSettings, savePeerReviewSettings, saveProjectAgreement, sendBulkAuthorEmail, sendPeerReviewFeedbackPacket, sendPeerReviewReminders, submitPeerReview, submitProposal, uploadAnonymisedReviewCopy, uploadDraftManuscript } from "@/app/actions";
 import { AuthButtons } from "@/components/auth-buttons";
 import { workflowStages } from "@/lib/sample-data";
@@ -1263,6 +1264,8 @@ function ApprovedAuthorsPanel({ book, chapters }: { book: BookRecord; chapters: 
   const mailtoHref = emailList ? `mailto:?bcc=${encodeURIComponent(emailList)}&subject=${encodeURIComponent("ChapterFlow update for approved authors")}` : "";
   const [bulkTemplateId, setBulkTemplateId] = useState("october-author-meeting");
   const [bulkAudience, setBulkAudience] = useState("current_authors");
+  const secondDraftAuthors = chapters.filter((chapter) => chapter.status !== "rejected" && hasSubmittedSecondDraft(chapter) && chapter.profiles?.email)
+    .filter((chapter, index, all) => all.findIndex((entry) => entry.profiles?.email?.toLowerCase() === chapter.profiles?.email?.toLowerCase()) === index);
   const isDraftReminder = ["one-week-first-draft-reminder", "first-draft-extension", "first-draft-november-15"].includes(bulkTemplateId);
   const selectedTemplate = reviewEmailTemplates.find((template) => template.id === bulkTemplateId) ?? reviewEmailTemplates[0];
 
@@ -1305,16 +1308,17 @@ function ApprovedAuthorsPanel({ book, chapters }: { book: BookRecord; chapters: 
         <input type="hidden" name="email_subject" value={selectedTemplate.subject} />
         <input type="hidden" name="email_template_body" value={selectedTemplate.body} />
         <div className="form-grid">
-          <label>Audience<select name="audience" value={isDraftReminder ? "awaiting_first_draft" : bulkAudience} onChange={(event) => setBulkAudience(event.target.value)}><option value="awaiting_first_draft">Approved authors who have not uploaded a draft</option>{!isDraftReminder ? <><option value="current_authors">Current approved authors</option><option value="first_drafts">Authors with first drafts / draft stage</option><option value="all_proposals">All active proposal authors</option></> : null}</select></label>
-          <label>Email template<select value={bulkTemplateId} onChange={(event) => setBulkTemplateId(event.target.value)}>{reviewEmailTemplates.map((template) => <option key={template.id} value={template.id}>{template.label}</option>)}</select></label>
+          <label>Audience<select name="audience" value={isDraftReminder ? "awaiting_first_draft" : bulkAudience} onChange={(event) => setBulkAudience(event.target.value)}><option value="awaiting_first_draft">Approved authors who have not uploaded a draft</option>{!isDraftReminder ? <><option value="current_authors">Current approved authors</option><option value="second_drafts">Authors with a submitted second draft ({secondDraftAuthors.length})</option><option value="first_drafts">Authors with first drafts / draft stage</option><option value="all_proposals">All active proposal authors</option></> : null}</select></label>
+          <label>Email template<select value={bulkTemplateId} onChange={(event) => { setBulkTemplateId(event.target.value); if (event.target.value === "author-publication-licence-agreement") setBulkAudience("second_drafts"); }}>{reviewEmailTemplates.map((template) => <option key={template.id} value={template.id}>{template.label}</option>)}</select></label>
         </div>
+        {!isDraftReminder && bulkAudience === "second_drafts" ? <div className="email-draft"><strong>{secondDraftAuthors.length} recipients with second drafts submitted</strong>{secondDraftAuthors.length ? <ul>{secondDraftAuthors.map((chapter) => <li key={chapter.id}>{chapter.profiles?.full_name || "Author"} - {chapter.profiles?.email}</li>)}</ul> : <p>No authors have uploaded a second draft yet.</p>}</div> : null}
         <label>Additional note<textarea name="additional_message" placeholder="Optional: add a short note to include beneath the selected template for every author." /></label>
         <div className="email-draft">
           <strong>Bulk email preview</strong>
           <p><strong>Subject:</strong> {selectedTemplate.subject}</p>
           <pre>{selectedTemplate.body}</pre>
         </div>
-        <BulkEmailButton disabled={!book.id || !approvedAuthors.length} />
+        <BulkEmailButton disabled={!book.id || (!isDraftReminder && bulkAudience === "second_drafts" ? !secondDraftAuthors.length : !approvedAuthors.length)} />
       </form>
     </div>
   );
