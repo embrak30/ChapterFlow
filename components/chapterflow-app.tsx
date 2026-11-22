@@ -13,6 +13,7 @@ import { AnonymisationEditor } from "@/components/anonymisation-editor";
 import { previewReviewBatch } from "@/lib/review-batch";
 import { reviewReadiness } from "@/lib/review-readiness";
 import { ReviewDocumentReader } from "@/components/review-document-reader";
+import { ManualReviewerAssigner } from "@/components/manual-reviewer";
 import { createPeerReviewBatch, sendPeerReviewBatchEmails } from "@/app/actions";
 import { manageProjectMember, createMagazineIssue } from "@/app/actions";
 
@@ -131,6 +132,8 @@ type PeerReviewRecord = {
 };
 
 type PeerReviewAssignmentRecord = {
+  review_deadline?:string|null;
+  is_manual?:boolean;
   peer_review_drafts?: {fields:Partial<PeerReviewRecord>;updated_at:string}[];
   batch_id?: string | null;
   batch?: { id: string; name: string; review_deadline: string | null } | Array<{ id: string; name: string; review_deadline: string | null }> | null;
@@ -438,8 +441,9 @@ export function ChapterFlowApp({ userEmail, userName, userRole, books, chapters,
   const authorProjectIds = new Set(
     userEmail ? chapters.filter((chapter) => chapter.profiles?.email?.toLowerCase() === userEmail.toLowerCase()).map((chapter) => chapter.book_id) : []
   );
+  const reviewerProjectIds=new Set(peerReviewAssignments.filter(assignment=>assignment.reviewer_id===userId).map(assignment=>assignment.book_id));
   const projectOptions = isSignedIn
-    ? books.filter((book) => canViewAdmin || canViewFacilitator || book.public_status === "open" || authorProjectIds.has(book.id))
+    ? books.filter((book) => canViewAdmin || canViewFacilitator || book.public_status === "open" || authorProjectIds.has(book.id) || reviewerProjectIds.has(book.id))
     : openBooks;
   const visibleBooks = projectOptions.length ? projectOptions : books;
   const [selectedBookId, setSelectedBookId] = useState(visibleBooks[0]?.id ?? "");
@@ -689,18 +693,22 @@ function AuthorView({
   peerReviewSettings?: PeerReviewSettingsRecord;
   peerReviewAssignments: PeerReviewAssignmentRecord[];
 }) {
+  const reviewerAssignments = userEmail
+    ? peerReviewAssignments.filter((assignment) => singleRecord(assignment.reviewer)?.email?.toLowerCase() === userEmail.toLowerCase())
+    : [];
+  const reviewerOnly=!chapter && reviewerAssignments.length>0;
   const workflow = draftWorkflow(chapter);
   const proposalApproved = Boolean(chapter && (chapter.status === "approved" || !chapter.stage.includes("proposal")));
   const [uploadState, uploadAction] = useActionState(uploadDraftManuscript, { success: false, error: "", stage: "" });
   const production=singleRecord(chapter?.chapter_production);
   const draftLabel = workflow.uploadStage === "final_materials" ? "Third / final draft" : workflow.uploadStage === "second_draft" ? "Second draft" : "First draft";
   const hasProposal = Boolean(chapter);
-  const showProposalForm=canEditProposal(chapter);
+  const showProposalForm=canEditProposal(chapter) && !reviewerOnly;
   const submissions = [...(chapter?.submissions ?? [])].sort(
     (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   );
   const hasDraftFile = submissions.some((submission) => (submission.submission_files ?? []).length > 0);
-  const defaultAuthorTab=showProposalForm?'proposal':workflow.thirdOpen && !workflow.finalDraft ? 'draft' : production?.final_materials_requested_at && !production.biography_received_at ? 'materials' : workflow.secondOpen && !workflow.secondDraft ? 'draft' : !hasDraftFile && workflow.canUpload ? 'draft' : agreement?.is_active && hasDraftFile && !agreementAcceptance ? 'agreement' : 'records';
+  const defaultAuthorTab=reviewerOnly && peerReviewSettings?.is_open?'reviews':showProposalForm?'proposal':workflow.thirdOpen && !workflow.finalDraft ? 'draft' : production?.final_materials_requested_at && !production.biography_received_at ? 'materials' : workflow.secondOpen && !workflow.secondDraft ? 'draft' : !hasDraftFile && workflow.canUpload ? 'draft' : agreement?.is_active && hasDraftFile && !agreementAcceptance ? 'agreement' : 'records';
   const [selectedAuthorTab, setAuthorTab] = useState(defaultAuthorTab);
   const authorTabs = [
     ...(showProposalForm ? [{ id: "proposal", label: hasProposal?'Revise proposal':'Submit proposal', detail: hasProposal?'Revisions requested':'Not submitted' }] : []),
@@ -710,10 +718,9 @@ function AuthorView({
     ...(production?.final_materials_requested_at ? [{id:'materials',label:'Final author details',detail:production.biography_received_at?'Received':'Action required'}] : []),
     ...(peerReviewSettings?.is_open ? [{ id: "reviews", label: "Peer review", detail: "Open assignments" }] : [])
   ];
-  const authorTab=authorTabs.some(tab=>tab.id===selectedAuthorTab)?selectedAuthorTab:defaultAuthorTab;
-  const reviewerAssignments = userEmail
-    ? peerReviewAssignments.filter((assignment) => singleRecord(assignment.reviewer)?.email?.toLowerCase() === userEmail.toLowerCase())
-    : [];
+  const visibleAuthorTabs=reviewerOnly?authorTabs.filter(tab=>tab.id==='reviews'):authorTabs;
+  const authorTab=visibleAuthorTabs.some(tab=>tab.id===selectedAuthorTab)?selectedAuthorTab:defaultAuthorTab;
+
 
   return (
     <section className="author-view">
@@ -724,15 +731,15 @@ function AuthorView({
           <p>Signed in as <strong>{userName || userEmail}</strong></p>
         </div>
         <span className={hasProposal ? statusClass(chapter?.status ?? "pending_review") : "pill pending-review"}>
-          {hasProposal ? displayStatus(chapter?.status ?? "pending_review") : "Proposal not submitted"}
+          {reviewerOnly ? "Assigned reviewer" : hasProposal ? displayStatus(chapter?.status ?? "pending_review") : "Proposal not submitted"}
         </span>
       </div>
       <section className="author-next-step">
-        <div><p className="eyebrow">Your next step</p><h3>{defaultAuthorTab==='draft'?`Upload your ${draftLabel.toLowerCase()}`:defaultAuthorTab==='proposal'?hasProposal?'Revise your proposal':'Submit your proposal':defaultAuthorTab==='agreement'?'Review and sign your agreement':defaultAuthorTab==='materials'?'Submit your final author details':chapter?.status==='pending_review'?'Your proposal is awaiting an editorial decision':'View your submitted work and feedback'}</h3></div>
-        <button type="button" onClick={()=>setAuthorTab(defaultAuthorTab)}>{defaultAuthorTab==='draft'?'Upload draft':defaultAuthorTab==='agreement'?'Open agreement':defaultAuthorTab==='materials'?'Open author details':defaultAuthorTab==='proposal'?'Open proposal':'Open work & feedback'}</button>
+        <div><p className="eyebrow">Your next step</p><h3>{defaultAuthorTab==='reviews'?'Complete your assigned peer reviews':defaultAuthorTab==='draft'?`Upload your ${draftLabel.toLowerCase()}`:defaultAuthorTab==='proposal'?hasProposal?'Revise your proposal':'Submit your proposal':defaultAuthorTab==='agreement'?'Review and sign your agreement':defaultAuthorTab==='materials'?'Submit your final author details':chapter?.status==='pending_review'?'Your proposal is awaiting an editorial decision':'View your submitted work and feedback'}</h3></div>
+        <button type="button" onClick={()=>setAuthorTab(defaultAuthorTab)}>{defaultAuthorTab==='reviews'?'Open peer review':defaultAuthorTab==='draft'?'Upload draft':defaultAuthorTab==='agreement'?'Open agreement':defaultAuthorTab==='materials'?'Open author details':defaultAuthorTab==='proposal'?'Open proposal':'Open work & feedback'}</button>
       </section>
       <nav className="author-task-nav" aria-label="Author tasks">
-        {authorTabs.map((tab) => <button key={tab.id} type="button" data-state={/action required|requested|ready to upload|^ready/i.test(tab.detail)?'action':/signed|submitted|received/i.test(tab.detail)?'complete':'info'} aria-pressed={authorTab === tab.id} className={authorTab === tab.id ? "active" : ""} onClick={() => setAuthorTab(tab.id)}><strong>{tab.label}</strong><small>{tab.detail}</small></button>)}
+        {visibleAuthorTabs.map((tab) => <button key={tab.id} type="button" data-state={/action required|requested|ready to upload|^ready/i.test(tab.detail)?'action':/signed|submitted|received/i.test(tab.detail)?'complete':'info'} aria-pressed={authorTab === tab.id} className={authorTab === tab.id ? "active" : ""} onClick={() => setAuthorTab(tab.id)}><strong>{tab.label}</strong><small>{tab.detail}</small></button>)}
       </nav>
       <div className="author-grid compact-author-grid" data-section={authorTab}>
         <section className="panel author-deadlines"><div className="section-heading"><p className="eyebrow">Project dates</p><h2>Deadlines</h2></div><DeadlineStrip book={book} /></section>
@@ -959,7 +966,7 @@ function PeerReviewAuthorPanel({
         <p className="muted">Work through each assigned chapter in a focused review space. Author names are hidden in this reviewer view.</p>
       </div>
       <div className="peer-review-guidance">
-        <strong>Review deadline: {formatDate(singleRecord(selectedAssignment?.batch)?.review_deadline ?? settings.review_deadline)} · {completedCount}/{assignments.length} submitted</strong>
+        <strong>Review deadline: {formatDate(selectedAssignment?.review_deadline ?? singleRecord(selectedAssignment?.batch)?.review_deadline ?? settings.review_deadline)} · {completedCount}/{assignments.length} submitted</strong>
         <p>{settings.instructions || "Focus on helping the author strengthen the chapter structure, connection to Mission Integrity, clarity of the story, practical value, and use of supporting evidence."}</p>
       </div>
       {assignments.length ? (
@@ -1385,6 +1392,7 @@ function PeerReviewAdminPanel({
       </nav>
       <label>Review group<select value={batchFilter} onChange={(event) => setBatchFilter(event.target.value)}><option value="all">All batches</option>{batches.map((batch) => <option value={batch.id} key={batch.id}>{batch.name} · {formatDate(batch.review_deadline)}</option>)}</select></label>
       <section hidden={peerSection !== "assignments"} className="peer-coverage-list peer-section">
+        <ManualReviewerAssigner bookId={book.id} chapters={readyChapters} assignments={allAssignments}/>
         <ReviewBatchBuilder bookId={book.id} chapters={unassignedChapters} onCreated={setBatchFilter} />
         <details><summary>Why other chapters are not selectable ({excludedChapters.length})</summary>{excludedChapters.map(chapter=><p key={chapter.id}><strong>{chapter.profiles?.full_name || 'Author'} · {chapter.title}</strong><br/>{reviewReadiness(chapter,allAssignments)}</p>)}</details>
       </section>

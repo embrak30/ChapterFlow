@@ -1095,6 +1095,40 @@ export async function sendPeerReviewBatchEmails(_previous: { success: boolean; e
   }
 }
 
+export async function assignAdditionalReviewer(_previous:{success:boolean;error:string;assignmentId:string},formData:FormData) {
+  try {
+    const {supabase}=await getSignedInProfile();
+    await requireProjectEditor(supabase,formData);
+    const {data,error}=await supabase.rpc('assign_additional_reviewer',{p_book_id:textValue(formData,'book_id'),p_chapter_id:textValue(formData,'chapter_id'),p_email:textValue(formData,'reviewer_email'),p_deadline:optionalDate(formData,'review_deadline')});
+    if(error || !data) throw new Error(error?.message ?? 'The assignment could not be created.');
+    revalidatePath('/');return {success:true,error:'',assignmentId:String(data)};
+  } catch(error) { return {success:false,error:error instanceof Error?error.message:'Assignment failed.',assignmentId:''}; }
+}
+
+export async function sendSingleReviewerInvitation(_previous:{success:boolean;error:string},formData:FormData) {
+  try {
+    const {supabase,user}=await getSignedInProfile();
+    const {data:assignment}=await supabase.from('peer_review_assignments').select('id,book_id,chapter_id,review_deadline,notified_at,reviewer:reviewer_id(full_name,email),chapter:chapter_id(title),batch:batch_id(review_deadline)').eq('id',textValue(formData,'assignment_id')).single();
+    if(!assignment) throw new Error('The assignment could not be found.');
+    const {data:allowed}=await supabase.rpc('can_edit_project',{b:assignment.book_id});
+    if(!allowed) throw new Error('Only this project editor can send the invitation.');
+    const {data:settings}=await supabase.from('peer_review_settings').select('is_open,instructions').eq('book_id',assignment.book_id).single();
+    if(!settings?.is_open) throw new Error('Open peer review in Settings before sending invitations.');
+    if(assignment.notified_at) return {success:true,error:''};
+    const reviewer=Array.isArray(assignment.reviewer)?assignment.reviewer[0]:assignment.reviewer;
+    const chapter=Array.isArray(assignment.chapter)?assignment.chapter[0]:assignment.chapter;
+    const batch=Array.isArray(assignment.batch)?assignment.batch[0]:assignment.batch;
+    if(!reviewer?.email) throw new Error('This reviewer has no email address.');
+    const subject=`Your chapter review assignment: ${chapter?.title ?? 'Assigned chapter'}`;
+    const body=`Dear ${reviewer.full_name || 'Reviewer'},\n\nThank you for agreeing to review \"${chapter?.title ?? 'this chapter'}\". Please complete your review by ${formatDate(assignment.review_deadline ?? batch?.review_deadline)}.\n\nSign in with this email address and open Author → Peer review. Your approved anonymised chapter copy and guided review form are available there. You can save progress and return before submitting.\n\n${settings.instructions || 'Please offer constructive feedback on structure, clarity, practical value and anonymity.'}\n\n${getSiteUrl()}\n\nBest wishes,\nThe editorial team`;
+    await sendResendEmail({to:reviewer.email,subject,text:body,html:`<p>${escapeHtml(body)}</p>`});
+    const {data:saved,error}=await supabase.from('peer_review_assignments').update({notified_at:new Date().toISOString()}).eq('id',assignment.id).select('id').single();
+    if(error || !saved) throw new Error('Invitation sent, but the delivery record could not be saved. Check before resending.');
+    await supabase.from('email_logs').insert({chapter_id:assignment.chapter_id,recipient_email:reviewer.email,subject,body,status:'sent',sent_by:user.id,sent_at:new Date().toISOString()});
+    revalidatePath('/');return {success:true,error:''};
+  } catch(error) { return {success:false,error:error instanceof Error?error.message:'The invitation could not be sent.'}; }
+}
+
 export async function generatePeerReviewAssignments(formData: FormData) {
   const { supabase, user, profile } = await getSignedInProfile();
 
@@ -1143,14 +1177,14 @@ export async function generatePeerReviewAssignments(formData: FormData) {
     const siteUrl = getSiteUrl();
     const assignmentsByReviewer = new Map<string, { email: string; name: string; chapters: string[] }>();
 
-    const { data: unsent, error: unsentError } = await supabase.from("peer_review_assignments").select("id, chapter_id, reviewer_id, reviewer:reviewer_id(full_name,email), chapter:chapter_id(title)").eq("book_id", bookId).eq("batch_id", batchId).is("notified_at", null).neq("status", "completed");
+    const { data: unsent, error: unsentError } = await supabase.from("peer_review_assignments").select("id, chapter_id, reviewer_id, review_deadline, reviewer:reviewer_id(full_name,email), chapter:chapter_id(title)").eq("book_id", bookId).eq("batch_id", batchId).is("notified_at", null).neq("status", "completed");
     if (unsentError) throw new Error(unsentError.message);
     for (const assignment of unsent ?? []) {
       const person=Array.isArray(assignment.reviewer)?assignment.reviewer[0]:assignment.reviewer;
       const assignedChapter=Array.isArray(assignment.chapter)?assignment.chapter[0]:assignment.chapter;
       if (!person?.email) throw new Error("An assigned reviewer has no profile email. Check the batch team before sending invitations.");
       const current: {email:string;name:string;chapters:string[]}=assignmentsByReviewer.get(assignment.reviewer_id) ?? {email:person.email,name:person.full_name || "there",chapters:[]};
-      current.chapters.push(assignedChapter?.title || "Assigned chapter");
+      current.chapters.push(`${assignedChapter?.title || "Assigned chapter"} (due ${formatDate(assignment.review_deadline ?? batch.review_deadline)})`);
       assignmentsByReviewer.set(assignment.reviewer_id,current);
     }
 
@@ -1165,7 +1199,7 @@ export async function generatePeerReviewAssignments(formData: FormData) {
         `You have ${reviewer.chapters.length} new or previously unnotified chapter${reviewer.chapters.length === 1 ? "" : "s"} to review:`,
         chapterList,
         "",
-        `Please complete your reviews by ${formatDate(batch.review_deadline)}.`,
+        "Please complete each review by the deadline listed with its chapter.",
         "",
         "The review process is guided in ChapterFlow. You will be asked to comment on structure, alignment with Mission Integrity, clarity of the story, practical value for school leaders, use of evidence, and recommended improvements.",
         "",
@@ -1180,7 +1214,7 @@ export async function generatePeerReviewAssignments(formData: FormData) {
         <p>The blind peer review stage for <strong>${escapeHtml(book?.title ?? "the edited book project")}</strong> is now open.</p>
         <p>You have ${reviewer.chapters.length} new or previously unnotified chapter${reviewer.chapters.length === 1 ? "" : "s"} to review:</p>
         <ol>${reviewer.chapters.map((title) => `<li>${escapeHtml(title)}</li>`).join("")}</ol>
-        <p>Please complete your reviews by <strong>${formatDate(batch.review_deadline)}</strong>.</p>
+        <p>Please complete each review by the deadline listed with its chapter.</p>
         <p>The review process is guided in ChapterFlow. You will be asked to comment on structure, alignment with Mission Integrity, clarity of the story, practical value for school leaders, use of evidence, and recommended improvements.</p>
         ${settings?.instructions ? `<p><strong>Additional guidance:</strong><br />${escapeHtml(settings.instructions)}</p>` : ""}
         <p><a href="${siteUrl}">Sign in to ChapterFlow</a></p>
@@ -1486,7 +1520,7 @@ export async function sendPeerReviewReminders(formData: FormData) {
   const { data: book } = await supabase.from("books").select("title").eq("id", bookId).single();
   const { data: assignments, error } = await supabase
     .from("peer_review_assignments")
-    .select("id, reviewer_id, profiles:reviewer_id(full_name, email), chapters:chapter_id(title)")
+    .select("id, reviewer_id, review_deadline, profiles:reviewer_id(full_name, email), chapters:chapter_id(title)")
     .eq("book_id", bookId)
     .eq("batch_id", batchId)
     .neq("status", "completed");
@@ -1509,7 +1543,7 @@ export async function sendPeerReviewReminders(formData: FormData) {
       `This is a gentle reminder that your peer review for ${book?.title ?? "the edited book project"} is still outstanding.`,
       "",
       `Assigned chapter: ${chapter?.title ?? "Assigned chapter"}`,
-      `Review deadline: ${formatDate(settings?.review_deadline)}`,
+      `Review deadline: ${formatDate(assignment.review_deadline ?? settings?.review_deadline)}`,
       "",
       "Please sign in to ChapterFlow and complete the guided review as soon as you can. Your feedback will help the author strengthen the structure, clarity, practical value, and alignment of their chapter.",
       "",
@@ -1524,7 +1558,7 @@ export async function sendPeerReviewReminders(formData: FormData) {
       <p>Hello ${escapeHtml(reviewer.full_name || "there")},</p>
       <p>This is a gentle reminder that your peer review for <strong>${escapeHtml(book?.title ?? "the edited book project")}</strong> is still outstanding.</p>
       <p><strong>Assigned chapter:</strong> ${escapeHtml(chapter?.title ?? "Assigned chapter")}<br />
-      <strong>Review deadline:</strong> ${formatDate(settings?.review_deadline)}</p>
+      <strong>Review deadline:</strong> ${formatDate(assignment.review_deadline ?? settings?.review_deadline)}</p>
       <p>Please sign in to ChapterFlow and complete the guided review as soon as you can. Your feedback will help the author strengthen the structure, clarity, practical value, and alignment of their chapter.</p>
       <p>If there is a problem with completing the review, please email the editorial team so we can support the process.</p>
       <p><a href="${siteUrl}">Sign in to ChapterFlow</a></p>
