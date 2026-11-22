@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useState } from "react";
+import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { acceptAuthorAgreement, adminUploadDraftManuscript, generatePeerReviewAssignments, resetPeerReviewProcess, reviewProposal, saveCallSettings, savePeerReviewSettings, saveProjectAgreement, sendBulkAuthorEmail, sendPeerReviewFeedbackPacket, sendPeerReviewReminders, submitPeerReview, submitProposal, uploadAnonymisedReviewCopy, uploadDraftManuscript } from "@/app/actions";
 import { AuthButtons } from "@/components/auth-buttons";
@@ -14,6 +14,10 @@ import { previewReviewBatch } from "@/lib/review-batch";
 import { reviewReadiness } from "@/lib/review-readiness";
 import { ReviewDocumentReader } from "@/components/review-document-reader";
 import { ManualReviewerAssigner } from "@/components/manual-reviewer";
+import { draftUploadError } from "@/lib/upload-error";
+import { prepareDirectDraft, finishDirectDraft } from "@/app/direct-draft-actions";
+import { createClient as createBrowserSupabaseClient } from "@/lib/supabase/browser";
+import { manuscriptMetadata } from "@/lib/manuscript-metadata";
 import { createPeerReviewBatch, sendPeerReviewBatchEmails } from "@/app/actions";
 import { manageProjectMember, createMagazineIssue } from "@/app/actions";
 
@@ -699,7 +703,36 @@ function AuthorView({
   const reviewerOnly=!chapter && reviewerAssignments.length>0;
   const workflow = draftWorkflow(chapter);
   const proposalApproved = Boolean(chapter && (chapter.status === "approved" || !chapter.stage.includes("proposal")));
-  const [uploadState, uploadAction] = useActionState(uploadDraftManuscript, { success: false, error: "", stage: "" });
+  const pendingUpload=useRef<{key:string;sessionId:string;path:string;token:string;contentType:string;uploaded:boolean}|null>(null);
+  const [uploadState, uploadAction,uploadPending] = useActionState(async (_previous:{success:boolean;error:string;stage:string},formData:FormData)=>{
+    try {
+      const file=formData.get('manuscript');
+      if(!(file instanceof File)) return {success:false,error:'Choose a Word manuscript before uploading.',stage:''};
+      try {manuscriptMetadata(file.name,file.size);} catch(error) {return {success:false,error:error instanceof Error?error.message:'Invalid file.',stage:''};}
+      const bookId=String(formData.get('book_id') ?? '');const chapterId=String(formData.get('chapter_id') ?? '');const stage=String(formData.get('draft_stage') ?? '');
+      const key=JSON.stringify([chapterId,stage,file.name,file.size,file.lastModified]);
+      if(pendingUpload.current?.key!==key) {
+        const prepared=await prepareDirectDraft({bookId,chapterId,stage,fileName:file.name,size:file.size,notes:String(formData.get('response_to_feedback') ?? '')});
+        if('error' in prepared) return {success:false,error:prepared.error || 'Could not prepare upload.',stage:''};
+        pendingUpload.current={key,...prepared,uploaded:false};
+      }
+      const ticket=pendingUpload.current;
+      if(!ticket) return {success:false,error:'Please select the manuscript and try again.',stage:''};
+      if(!ticket.uploaded) {
+        const {error}=await createBrowserSupabaseClient().storage.from('chapter-drafts').uploadToSignedUrl(ticket.path,ticket.token,file,{contentType:ticket.contentType});
+        if(error) {
+          const recovered=await finishDirectDraft(ticket.sessionId);
+          if('error' in recovered) return {success:false,error:`The Word file could not be uploaded: ${error.message}`,stage:''};
+          pendingUpload.current=null;return {success:true,error:'',stage};
+        }
+        ticket.uploaded=true;
+      }
+      const result=await finishDirectDraft(ticket.sessionId);
+      if('error' in result) return {success:false,error:result.error || 'The upload could not be recorded. Retry to finish saving this file.',stage:''};
+      pendingUpload.current=null;return {success:true,error:'',stage};
+    }
+    catch(error) { return {success:false,error:draftUploadError(error),stage:''}; }
+  }, { success: false, error: "", stage: "" });
   const production=singleRecord(chapter?.chapter_production);
   const draftLabel = workflow.uploadStage === "final_materials" ? "Third / final draft" : workflow.uploadStage === "second_draft" ? "Second draft" : "First draft";
   const hasProposal = Boolean(chapter);
@@ -768,14 +801,14 @@ function AuthorView({
         <section className="panel draft-panel">
           <div className="section-heading"><p className="eyebrow">Manuscript upload</p><h2>{draftLabel} manuscript</h2></div>
           {workflow.canUpload ? (
-            <form action={uploadAction} className="draft-upload-form">
+            <form action={uploadAction} onReset={event=>event.preventDefault()} className="draft-upload-form">
               <input type="hidden" name="book_id" value={book.id} />
               <input type="hidden" name="chapter_id" value={chapter?.id ?? ""} />
               <input type="hidden" name="draft_stage" value={workflow.uploadStage} />
               <p className="muted">{workflow.thirdOpen ? "Upload your third/final draft addressing the editorial feedback. All earlier versions are kept." : workflow.secondOpen ? "Upload your revised second draft and describe how you addressed the reviews. Your first draft remains in your submission history." : hasDraftFile ? "You can upload a newer version if the editor has asked for an updated first draft." : "Upload your first draft manuscript as a Microsoft Word document."}</p>
               {workflow.thirdOpen ? <p className="muted">Final draft deadline: {formatDate(book.final_materials_deadline)}</p> : workflow.secondOpen ? <p className="muted">Second draft deadline: {formatDate(book.second_draft_deadline)}</p> : null}
-              <label>Word manuscript<input name="manuscript" type="file" accept=".doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" required /></label>
-              <label>Notes or response to feedback<textarea name="response_to_feedback" placeholder="Optional: tell the editor what you have changed, or add any context for this draft." /></label>
+              <label>Word manuscript<input name="manuscript" type="file" disabled={uploadPending} accept=".doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" required /></label>
+              <label>Notes or response to feedback<textarea name="response_to_feedback" disabled={uploadPending} placeholder="Optional: tell the editor what you have changed, or add any context for this draft." /></label>
               <DraftUploadButton stage={workflow.uploadStage} hasDraftFile={workflow.thirdOpen ? workflow.finalDraft : workflow.secondOpen ? workflow.secondDraft : hasDraftFile} />
               {uploadState.error ? <p role="alert">{uploadState.error}</p> : null}
               {uploadState.success ? <p className="notice" role="status">{displayStatus(uploadState.stage)} saved successfully. Earlier versions have been kept.</p> : null}
