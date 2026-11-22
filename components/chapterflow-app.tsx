@@ -12,6 +12,7 @@ import type { ProductionRecord } from "@/lib/chapter-progress";
 import { AnonymisationEditor } from "@/components/anonymisation-editor";
 import { previewReviewBatch } from "@/lib/review-batch";
 import { reviewReadiness } from "@/lib/review-readiness";
+import { ReviewDocumentReader } from "@/components/review-document-reader";
 import { createPeerReviewBatch, sendPeerReviewBatchEmails } from "@/app/actions";
 import { manageProjectMember, createMagazineIssue } from "@/app/actions";
 
@@ -130,6 +131,7 @@ type PeerReviewRecord = {
 };
 
 type PeerReviewAssignmentRecord = {
+  peer_review_drafts?: {fields:Partial<PeerReviewRecord>;updated_at:string}[];
   batch_id?: string | null;
   batch?: { id: string; name: string; review_deadline: string | null } | Array<{ id: string; name: string; review_deadline: string | null }> | null;
   id: string;
@@ -962,8 +964,7 @@ function PeerReviewAuthorPanel({
       </div>
       {assignments.length ? (
         <div className="peer-review-workspace">
-          <aside className="peer-review-queue" aria-label="Peer review assignments">
-            <strong>Assigned chapters</strong>
+          <nav className="peer-review-queue" aria-label="Assigned chapter tabs">
             {assignments.map((assignment, index) => (
               <PeerReviewAssignmentSummary
                 assignment={assignment}
@@ -973,8 +974,8 @@ function PeerReviewAuthorPanel({
                 onSelect={() => setSelectedAssignmentId(assignment.id)}
               />
             ))}
-          </aside>
-          {selectedAssignment ? <PeerReviewReadingRoom assignment={selectedAssignment} index={assignments.findIndex((assignment) => assignment.id === selectedAssignment.id)} /> : null}
+          </nav>
+          {assignments.map((assignment,index)=><div className="peer-assignment-workspace" hidden={selectedAssignment?.id!==assignment.id} key={assignment.id}><PeerReviewReadingRoom assignment={assignment} index={index} active={selectedAssignment?.id===assignment.id}/></div>)}
         </div>
       ) : (
         <EmptyState title="No peer review assignments yet" message="When the editor assigns chapters to you, they will appear here." />
@@ -1003,15 +1004,16 @@ function PeerReviewAssignmentSummary({
   const existingReview = assignment.peer_reviews?.[0];
 
   return (
-    <button className={`peer-review-queue-item ${isSelected ? "selected" : ""}`} onClick={onSelect} type="button">
+    <button aria-pressed={isSelected} className={`peer-review-queue-item ${isSelected ? "selected" : ""}`} onClick={onSelect} type="button">
       <span>Assigned chapter {index + 1}</span>
       <strong>{chapter?.title || "Untitled chapter"}</strong>
-      <small className={statusClass(existingReview ? "complete" : assignment.status)}>{existingReview ? "Review submitted" : displayStatus(assignment.status)}</small>
+      <small className={statusClass(existingReview ? "complete" : assignment.status)}>{existingReview ? "Review submitted" : assignment.peer_review_drafts?.length ? "Progress saved" : displayStatus(assignment.status)}</small>
     </button>
   );
 }
 
-function PeerReviewReadingRoom({ assignment, index }: { assignment: PeerReviewAssignmentRecord; index: number }) {
+function PeerReviewReadingRoom({ assignment, index, active }: { assignment: PeerReviewAssignmentRecord; index: number; active:boolean }) {
+  const [mobilePane,setMobilePane]=useState('read');
   const chapter = singleRecord(assignment.chapter);
   const existingReview = assignment.peer_reviews?.[0];
   const approvedReviewCopy = latestApprovedReviewCopy(chapter);
@@ -1022,37 +1024,13 @@ function PeerReviewReadingRoom({ assignment, index }: { assignment: PeerReviewAs
         <div>
           <p className="eyebrow">Reading room · Assigned chapter {index + 1}</p>
           <h3>{chapter?.title || "Untitled chapter"}</h3>
-          <p className="muted">Review the anonymised draft file, then complete the guided form below. Save when your feedback is ready to submit.</p>
+          <p className="muted">Read the chapter alongside your feedback. Save progress to return later, or submit when complete.</p>
         </div>
         <span className={statusClass(existingReview ? "complete" : assignment.status)}>{existingReview ? "Review submitted" : displayStatus(assignment.status)}</span>
       </div>
-      <div className="peer-reading-layout">
-        <section className="peer-document-panel">
-          <div className="document-preview compact-preview">
-            <span>Anonymised draft for review</span>
-            {approvedReviewCopy ? (
-              <>
-                <p className="muted">Open the anonymised review copy in a separate tab so you can read the full chapter while keeping this review form available. If the document still reveals identifying details, note that in the anonymity section.</p>
-                <div className="file-row">
-                  <span>{approvedReviewCopy.file_name}</span>
-                  <a className="button-link" href={peerReviewFileHref(approvedReviewCopy)} target="_blank" rel="noreferrer">Open anonymised copy</a>
-                </div>
-              </>
-            ) : (
-              <p>No approved anonymised review copy is attached yet. Please contact the editorial team before starting this review.</p>
-            )}
-          </div>
-          <div className="review-helper-card">
-            <strong>Blind review reminder</strong>
-            <p>Do not try to identify the author. Focus on the chapter, the reader experience, the structure, and the practical value. Flag names, school details, locations, roles, or timelines that could compromise anonymity.</p>
-          </div>
-          <div className="review-helper-card">
-            <strong>Expected structure</strong>
-            <ul>
-              {chapterStructureItems.slice(0, 8).map((item) => <li key={item}>{item}</li>)}
-            </ul>
-          </div>
-        </section>
+      <nav className="reading-mode-switch" aria-label="Reading room view"><button type="button" aria-pressed={mobilePane==='read'} onClick={()=>setMobilePane('read')}>Read chapter</button><button type="button" aria-pressed={mobilePane==='review'} onClick={()=>setMobilePane('review')}>Write review</button></nav>
+      <div className="peer-reading-layout" data-pane={mobilePane}>
+        {approvedReviewCopy ? <ReviewDocumentReader key={approvedReviewCopy.id} fileId={approvedReviewCopy.id} active={active}/> : <section className="peer-document-panel review-reader-pane"><p role="status">No approved anonymised copy is available. Please contact the editor.</p></section>}
         <PeerReviewForm key={assignment.id} assignment={assignment} existingReview={existingReview} />
       </div>
     </article>
@@ -1060,7 +1038,8 @@ function PeerReviewReadingRoom({ assignment, index }: { assignment: PeerReviewAs
 }
 
 function PeerReviewForm({ assignment, existingReview }: { assignment: PeerReviewAssignmentRecord; existingReview?: PeerReviewRecord }) {
-  const [reviewState, reviewAction] = useActionState(submitPeerReview, { success: false, error: "", warning: "" });
+  const [reviewState, reviewAction] = useActionState(submitPeerReview, { success: false, error: "", warning: "", mode: "" });
+  const formReview={...existingReview,...assignment.peer_review_drafts?.[0]?.fields};
   return (
     <form action={reviewAction} onReset={(event) => event.preventDefault()} className="peer-review-form peer-reading-form">
       <input type="hidden" name="assignment_id" value={assignment.id} />
@@ -1070,28 +1049,28 @@ function PeerReviewForm({ assignment, existingReview }: { assignment: PeerReview
         <p className="muted">Tick each expected section that is clearly present. Use the written response to identify what is missing, underdeveloped, or out of sequence.</p>
         {chapterStructureItems.map((item) => (
           <label className="check-row" key={item}>
-            <input type="checkbox" name="structure_items" value={item} defaultChecked={existingReview?.structure_items?.includes(item)} />
+            <input type="checkbox" name="structure_items" value={item} defaultChecked={formReview.structure_items?.includes(item)} />
             <span>{item}</span>
           </label>
         ))}
       </fieldset>
-      <label>Structure rating<select name="structure_rating" required defaultValue={existingReview?.structure_rating ?? ""}><option value="">Select one</option><option value="strong_structure">Strong structure</option><option value="minor_improvements">Mostly clear, minor improvements needed</option><option value="needs_clearer_organisation">Needs clearer organisation</option><option value="significant_restructuring">Significant restructuring needed</option></select></label>
-      <label>Structure feedback<textarea name="structure_feedback" required minLength={120} defaultValue={existingReview?.structure_feedback ?? ""} placeholder="Identify any required sections that are missing, underdeveloped, or out of sequence. Explain what the author should add, move, or strengthen so the chapter follows the expected structure. Please write at least two sentences." /></label>
-      <label>Mission Integrity alignment<select name="mission_alignment_rating" required defaultValue={existingReview?.mission_alignment_rating ?? ""}><option value="">Select one</option><option value="strongly_aligned">Strongly aligned</option><option value="mostly_aligned">Mostly aligned</option><option value="partly_aligned">Partly aligned</option><option value="needs_clearer_alignment">Needs clearer alignment</option></select></label>
-      <label>Mission Integrity feedback<textarea name="mission_alignment_feedback" required minLength={120} defaultValue={existingReview?.mission_alignment_feedback ?? ""} placeholder="Explain how the chapter connects to mission, integrity, values-led leadership, or the wider purpose of the book. Describe where this connection is strongest and where it could be made clearer." /></label>
-      <label>Flow and reader journey<select name="flow_rating" required defaultValue={existingReview?.flow_rating ?? ""}><option value="">Select one</option><option value="very_clear">Very clear and easy to follow</option><option value="mostly_clear">Mostly clear</option><option value="needs_clearer_links">Some sections need clearer links</option><option value="difficult_to_follow">Difficult to follow</option></select></label>
-      <label>Flow feedback<textarea name="flow_feedback" required minLength={120} defaultValue={existingReview?.flow_feedback ?? ""} placeholder="Describe how the chapter moves from idea to idea. Identify any gaps, repetition, unclear transitions, or sections where the reader may need more guidance." /></label>
-      <label>Story, voice, and field experience<select name="story_rating" required defaultValue={existingReview?.story_rating ?? ""}><option value="">Select one</option><option value="strong_authentic_engaging">Strong, authentic, and engaging</option><option value="good_with_development">Good story with some development needed</option><option value="interesting_needs_detail">Interesting but needs more detail</option><option value="story_unclear">Story or lived experience is unclear</option></select></label>
-      <label>Story feedback<textarea name="story_feedback" required minLength={120} defaultValue={existingReview?.story_feedback ?? ""} placeholder="Explain how the chapter presents a real leadership story or field-based experience. Describe what makes the story authentic, useful, or engaging, and where the author could add more detail or clarity." /></label>
-      <label>Writing standard and accessibility<select name="writing_rating" required defaultValue={existingReview?.writing_rating ?? ""}><option value="">Select one</option><option value="clear_engaging_ready">Clear, engaging, and publication-ready</option><option value="minor_edits">Clear overall, with minor edits needed</option><option value="needs_editing">Understandable but needs editing</option><option value="significant_improvement">Needs significant improvement</option></select></label>
-      <label>Writing feedback<textarea name="writing_feedback" required minLength={120} defaultValue={existingReview?.writing_feedback ?? ""} placeholder="Describe the standard of the writing and how accessible it is for school leaders. Identify where the author should simplify, clarify, strengthen, or make the writing more engaging." /></label>
-      <label>Anonymity and contextual confidentiality<select name="anonymity_rating" required defaultValue={existingReview?.anonymity_rating ?? ""}><option value="">Select one</option><option value="no_concerns">No anonymity concerns identified</option><option value="minor_anonymising">Minor details may need anonymising</option><option value="several_details">Several contextual details need attention</option><option value="significant_concerns">Significant anonymity/confidentiality concerns</option></select></label>
-      <label>Anonymity feedback<textarea name="anonymity_feedback" required minLength={120} defaultValue={existingReview?.anonymity_feedback ?? ""} placeholder="Identify any names, roles, locations, institutional details, events, timelines, or contextual clues that could make people or places identifiable. Suggest what could be anonymised, softened, generalised, or removed while preserving the value of the story." /></label>
-      <label>Top three actions<textarea name="recommendations" required minLength={120} defaultValue={existingReview?.recommendations ?? ""} placeholder="List the top three actions the author should take next. Please make them specific and usable." /></label>
-      <label>Overall recommendation<select name="overall_recommendation" defaultValue={existingReview?.overall_recommendation ?? "revise_and_resubmit"}><option value="minor_revisions">Minor revisions</option><option value="revise_and_resubmit">Revise and strengthen</option><option value="major_revisions">Major revisions needed</option><option value="ready_for_editorial_review">Ready for editorial review</option></select></label>
+      <label>Structure rating<select name="structure_rating" required defaultValue={formReview.structure_rating ?? ""}><option value="">Select one</option><option value="strong_structure">Strong structure</option><option value="minor_improvements">Mostly clear, minor improvements needed</option><option value="needs_clearer_organisation">Needs clearer organisation</option><option value="significant_restructuring">Significant restructuring needed</option></select></label>
+      <label>Structure feedback<textarea name="structure_feedback" required minLength={120} defaultValue={formReview.structure_feedback ?? ""} placeholder="Identify any required sections that are missing, underdeveloped, or out of sequence. Explain what the author should add, move, or strengthen so the chapter follows the expected structure. Please write at least two sentences." /></label>
+      <label>Mission Integrity alignment<select name="mission_alignment_rating" required defaultValue={formReview.mission_alignment_rating ?? ""}><option value="">Select one</option><option value="strongly_aligned">Strongly aligned</option><option value="mostly_aligned">Mostly aligned</option><option value="partly_aligned">Partly aligned</option><option value="needs_clearer_alignment">Needs clearer alignment</option></select></label>
+      <label>Mission Integrity feedback<textarea name="mission_alignment_feedback" required minLength={120} defaultValue={formReview.mission_alignment_feedback ?? ""} placeholder="Explain how the chapter connects to mission, integrity, values-led leadership, or the wider purpose of the book. Describe where this connection is strongest and where it could be made clearer." /></label>
+      <label>Flow and reader journey<select name="flow_rating" required defaultValue={formReview.flow_rating ?? ""}><option value="">Select one</option><option value="very_clear">Very clear and easy to follow</option><option value="mostly_clear">Mostly clear</option><option value="needs_clearer_links">Some sections need clearer links</option><option value="difficult_to_follow">Difficult to follow</option></select></label>
+      <label>Flow feedback<textarea name="flow_feedback" required minLength={120} defaultValue={formReview.flow_feedback ?? ""} placeholder="Describe how the chapter moves from idea to idea. Identify any gaps, repetition, unclear transitions, or sections where the reader may need more guidance." /></label>
+      <label>Story, voice, and field experience<select name="story_rating" required defaultValue={formReview.story_rating ?? ""}><option value="">Select one</option><option value="strong_authentic_engaging">Strong, authentic, and engaging</option><option value="good_with_development">Good story with some development needed</option><option value="interesting_needs_detail">Interesting but needs more detail</option><option value="story_unclear">Story or lived experience is unclear</option></select></label>
+      <label>Story feedback<textarea name="story_feedback" required minLength={120} defaultValue={formReview.story_feedback ?? ""} placeholder="Explain how the chapter presents a real leadership story or field-based experience. Describe what makes the story authentic, useful, or engaging, and where the author could add more detail or clarity." /></label>
+      <label>Writing standard and accessibility<select name="writing_rating" required defaultValue={formReview.writing_rating ?? ""}><option value="">Select one</option><option value="clear_engaging_ready">Clear, engaging, and publication-ready</option><option value="minor_edits">Clear overall, with minor edits needed</option><option value="needs_editing">Understandable but needs editing</option><option value="significant_improvement">Needs significant improvement</option></select></label>
+      <label>Writing feedback<textarea name="writing_feedback" required minLength={120} defaultValue={formReview.writing_feedback ?? ""} placeholder="Describe the standard of the writing and how accessible it is for school leaders. Identify where the author should simplify, clarify, strengthen, or make the writing more engaging." /></label>
+      <label>Anonymity and contextual confidentiality<select name="anonymity_rating" required defaultValue={formReview.anonymity_rating ?? ""}><option value="">Select one</option><option value="no_concerns">No anonymity concerns identified</option><option value="minor_anonymising">Minor details may need anonymising</option><option value="several_details">Several contextual details need attention</option><option value="significant_concerns">Significant anonymity/confidentiality concerns</option></select></label>
+      <label>Anonymity feedback<textarea name="anonymity_feedback" required minLength={120} defaultValue={formReview.anonymity_feedback ?? ""} placeholder="Identify any names, roles, locations, institutional details, events, timelines, or contextual clues that could make people or places identifiable. Suggest what could be anonymised, softened, generalised, or removed while preserving the value of the story." /></label>
+      <label>Top three actions<textarea name="recommendations" required minLength={120} defaultValue={formReview.recommendations ?? ""} placeholder="List the top three actions the author should take next. Please make them specific and usable." /></label>
+      <label>Overall recommendation<select name="overall_recommendation" defaultValue={formReview.overall_recommendation ?? "revise_and_resubmit"}><option value="minor_revisions">Minor revisions</option><option value="revise_and_resubmit">Revise and strengthen</option><option value="major_revisions">Major revisions needed</option><option value="ready_for_editorial_review">Ready for editorial review</option></select></label>
       <PeerReviewSubmitButton hasExistingReview={Boolean(existingReview)} />
       {reviewState.error ? <p role="alert">{reviewState.error}</p> : null}
-      {reviewState.success ? <p className="notice" role="status">Your review has been saved successfully.</p> : null}
+      {reviewState.success ? <p className="notice" role="status">{reviewState.mode==="draft"?"Progress saved. Submit the review when you are ready to share it with the editor.":"Your review has been submitted successfully."}</p> : null}
       {reviewState.warning ? <p role="alert">{reviewState.warning}</p> : null}
     </form>
   );
@@ -1099,7 +1078,7 @@ function PeerReviewForm({ assignment, existingReview }: { assignment: PeerReview
 
 function PeerReviewSubmitButton({ hasExistingReview }: { hasExistingReview: boolean }) {
   const { pending } = useFormStatus();
-  return <button className="primary" disabled={pending} type="submit">{pending ? "Saving review..." : hasExistingReview ? "Update peer review" : "Submit peer review"}</button>;
+  return <div className="review-save-actions"><button disabled={pending} type="submit" name="_action" value="save_progress" formNoValidate>{pending?"Saving...":"Save progress"}</button><button className="primary" disabled={pending} type="submit" name="_action" value="submit">{pending ? "Saving review..." : hasExistingReview ? "Update submitted review" : "Submit peer review"}</button></div>;
 }
 
 function AdminView({

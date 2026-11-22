@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { canEditProposal, draftWorkflow } from "@/lib/draft-workflow";
+import { reviewProgressFields } from "@/lib/review-progress";
 
 type ReviewDecision = "approved" | "revision_requested" | "rejected";
 
@@ -1261,15 +1262,31 @@ export async function resetPeerReviewProcess(formData: FormData) {
 }
 
 export async function submitPeerReview(
-  _previous: { success: boolean; error: string; warning: string },
+  _previous: { success: boolean; error: string; warning: string; mode?:string },
   formData: FormData
 ) {
   try {
+    if(textValue(formData,'_action')==='save_progress') {
+      await savePeerReviewProgress(formData);
+      return {success:true,error:'',warning:'',mode:'draft'};
+    }
     const warning = await persistPeerReview(formData);
-    return { success: true, error: "", warning };
+    return { success: true, error: "", warning, mode:'submitted' };
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : "The review could not be saved.", warning: "" };
+    return { success: false, error: error instanceof Error ? error.message : "The review could not be saved.", warning: "",mode:'' };
   }
+}
+
+async function savePeerReviewProgress(formData:FormData) {
+  const {supabase,user}=await getSignedInProfile();
+  const assignmentId=textValue(formData,'assignment_id');
+  const {data:assignment}=await supabase.from('peer_review_assignments').select('id,book_id,chapter_id').eq('id',assignmentId).eq('reviewer_id',user.id).single();
+  if(!assignment || assignment.chapter_id!==textValue(formData,'chapter_id')) throw new Error('This review is not assigned to your account.');
+  const {data:settings}=await supabase.from('peer_review_settings').select('is_open').eq('book_id',assignment.book_id).single();
+  if(!settings?.is_open) throw new Error('Peer review is currently closed. Contact the editor before continuing.');
+  const {data:saved,error}=await supabase.from('peer_review_drafts').upsert({assignment_id:assignmentId,reviewer_id:user.id,fields:reviewProgressFields(formData),updated_at:new Date().toISOString()},{onConflict:'assignment_id'}).select('assignment_id').single();
+  if(error || !saved) throw new Error(`Progress could not be saved: ${error?.message ?? 'save not confirmed'}`);
+  revalidatePath('/');
 }
 
 async function persistPeerReview(formData: FormData) {
@@ -1339,6 +1356,7 @@ async function persistPeerReview(formData: FormData) {
   if (reviewError || !savedReview) {
     throw new Error(`Your review could not be saved: ${reviewError?.message ?? "the database did not confirm the save"}`);
   }
+  await supabase.from('peer_review_drafts').delete().eq('assignment_id',assignmentId).eq('reviewer_id',user.id);
 
   const { data: completed } = await supabase.from("peer_review_assignments").select("status").eq("id", assignmentId).single();
   let warning = "";

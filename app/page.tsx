@@ -56,7 +56,7 @@ export default async function Home() {
     .order("created_at", { ascending: true });
   const { data: peerReviewAssignments, error: peerReviewAssignmentsError } = await supabase
     .from("peer_review_assignments")
-    .select("*, batch:batch_id(id, name, review_deadline), reviewer:reviewer_id(full_name, email), chapter:chapter_id(id, book_id, title, abstract, proposal_outline, stage, status, current_deadline, created_at, profiles:author_id(full_name, email), submissions!submissions_chapter_id_fkey(*, submission_files(*)), peer_review_files(*)), peer_reviews(*)")
+    .select("*, batch:batch_id(id, name, review_deadline), reviewer:reviewer_id(full_name, email), chapter:chapter_id(id, book_id, title, abstract, proposal_outline, stage, status, current_deadline, created_at, profiles:author_id(full_name, email), submissions!submissions_chapter_id_fkey(*, submission_files(*)), peer_review_files(*)), peer_reviews(*), peer_review_drafts(*)")
     .order("created_at", { ascending: true });
   const { data: bookAgreements } = await supabase
     .from("book_agreements")
@@ -90,7 +90,8 @@ export default async function Home() {
       peerReviewSettings={peerReviewSettings ?? []}
       peerReviewAssignments={(peerReviewAssignments ?? []).map((assignment) => ({
         ...assignment,
-        peer_reviews: relatedRecords(assignment.peer_reviews)
+        peer_reviews: relatedRecords(assignment.peer_reviews),
+        peer_review_drafts: relatedRecords(assignment.peer_review_drafts)
       }))}
       bookAgreements={bookAgreements ?? []}
       agreementAcceptances={agreementAcceptances ?? []}
