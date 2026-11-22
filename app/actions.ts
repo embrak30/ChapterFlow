@@ -735,6 +735,9 @@ export async function reviewProposal(formData: FormData) {
   if (!chapterId || !bookId || !["approved", "revision_requested", "rejected"].includes(decision)) {
     throw new Error("Choose a valid review decision.");
   }
+  const {data: proposalChapter,error:proposalError}=await supabase.from("chapters").select("id, submissions!submissions_chapter_id_fkey(stage,submission_files(id))").eq("id",chapterId).eq("book_id",bookId).single();
+  if(proposalError || !proposalChapter) throw new Error("The chapter could not be found in this project.");
+  if(proposalChapter.submissions.some(submission=>submission.stage.includes('draft') && submission.submission_files.length)) throw new Error("This chapter already has an uploaded manuscript. Use Chapter tracking to manage it; proposal approval cannot overwrite its draft status.");
 
   const { data: book } = await supabase
     .from("books")
