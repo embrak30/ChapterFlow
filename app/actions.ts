@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { draftWorkflow } from "@/lib/draft-workflow";
+import { canEditProposal, draftWorkflow } from "@/lib/draft-workflow";
 
 type ReviewDecision = "approved" | "revision_requested" | "rejected";
 
@@ -444,18 +444,16 @@ export async function submitProposal(formData: FormData) {
     throw new Error("Please add a chapter title and story proposal before submitting.");
   }
 
-  if (biography) {
-    await supabase.from("profiles").update({ biography }).eq("id", user.id);
-  }
-
   const { data: book } = await supabase.from("books").select("proposal_deadline").eq("id", bookId).maybeSingle();
   const existingQuery = supabase
     .from("chapters")
-    .select("id, status")
+    .select("id, status, stage, submissions!submissions_chapter_id_fkey(stage,submission_files(id))")
     .eq("book_id", bookId)
     .eq("author_id", user.id);
   const { data: existingChapter, error: existingError } = await (issueId ? existingQuery.eq("issue_id", issueId) : existingQuery.is("issue_id", null)).maybeSingle();
   if (existingError) throw new Error(existingError.message);
+  if(!canEditProposal(existingChapter)) throw new Error("Your proposal is already submitted. It can only be edited if the editor requests proposal revisions. Use Draft upload for your manuscript.");
+  if (biography) await supabase.from("profiles").update({ biography }).eq("id", user.id);
 
   const chapterPayload = {
     issue_id: issueId || null,

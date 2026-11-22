@@ -5,7 +5,7 @@ import { useFormStatus } from "react-dom";
 import { acceptAuthorAgreement, adminUploadDraftManuscript, generatePeerReviewAssignments, resetPeerReviewProcess, reviewProposal, saveCallSettings, savePeerReviewSettings, saveProjectAgreement, sendBulkAuthorEmail, sendPeerReviewFeedbackPacket, sendPeerReviewReminders, submitPeerReview, submitProposal, uploadAnonymisedReviewCopy, uploadDraftManuscript } from "@/app/actions";
 import { AuthButtons } from "@/components/auth-buttons";
 import { workflowStages } from "@/lib/sample-data";
-import { draftWorkflow } from "@/lib/draft-workflow";
+import { canEditProposal, draftWorkflow } from "@/lib/draft-workflow";
 import { selectEditorialDraft } from "@/app/actions";
 import { ChapterTracker, FinalAuthorMaterials } from "@/components/chapter-tracker";
 import type { ProductionRecord } from "@/lib/chapter-progress";
@@ -693,19 +693,22 @@ function AuthorView({
   const production=singleRecord(chapter?.chapter_production);
   const draftLabel = workflow.uploadStage === "final_materials" ? "Third / final draft" : workflow.uploadStage === "second_draft" ? "Second draft" : "First draft";
   const hasProposal = Boolean(chapter);
+  const showProposalForm=canEditProposal(chapter);
   const submissions = [...(chapter?.submissions ?? [])].sort(
     (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   );
   const hasDraftFile = submissions.some((submission) => (submission.submission_files ?? []).length > 0);
-  const [authorTab, setAuthorTab] = useState(workflow.thirdOpen && !workflow.finalDraft ? "draft" : production?.final_materials_requested_at && !production.biography_received_at ? "materials" : workflow.secondOpen && !workflow.secondDraft ? "draft" : hasDraftFile ? "records" : proposalApproved ? "draft" : "proposal");
+  const defaultAuthorTab=showProposalForm?'proposal':workflow.thirdOpen && !workflow.finalDraft ? 'draft' : production?.final_materials_requested_at && !production.biography_received_at ? 'materials' : workflow.secondOpen && !workflow.secondDraft ? 'draft' : !hasDraftFile && workflow.canUpload ? 'draft' : agreement?.is_active && hasDraftFile && !agreementAcceptance ? 'agreement' : 'records';
+  const [selectedAuthorTab, setAuthorTab] = useState(defaultAuthorTab);
   const authorTabs = [
-    { id: "proposal", label: "Proposal", detail: hasProposal ? displayStatus(chapter?.status ?? "pending_review") : "Not submitted" },
+    ...(showProposalForm ? [{ id: "proposal", label: hasProposal?'Revise proposal':'Submit proposal', detail: hasProposal?'Revisions requested':'Not submitted' }] : []),
     { id: "draft", label: "Draft upload", detail: workflow.thirdOpen ? workflow.finalDraft ? "Final draft submitted" : "Final draft requested" : workflow.secondDraft ? "Second draft submitted" : workflow.secondOpen ? "Second draft ready to upload" : hasDraftFile ? "First draft submitted" : proposalApproved ? "Ready to upload" : "Awaiting approval" },
     { id: "records", label: "Work & feedback", detail: `${submissions.length} submissions · ${chapter?.reviews?.length ?? 0} decisions` },
     { id: "agreement", label: "Agreement", detail: agreementAcceptance ? "Signed" : agreement?.is_active && hasDraftFile ? "Action required" : "Not yet open" },
     ...(production?.final_materials_requested_at ? [{id:'materials',label:'Final author details',detail:production.biography_received_at?'Received':'Action required'}] : []),
     ...(peerReviewSettings?.is_open ? [{ id: "reviews", label: "Peer review", detail: "Open assignments" }] : [])
   ];
+  const authorTab=authorTabs.some(tab=>tab.id===selectedAuthorTab)?selectedAuthorTab:defaultAuthorTab;
   const reviewerAssignments = userEmail
     ? peerReviewAssignments.filter((assignment) => singleRecord(assignment.reviewer)?.email?.toLowerCase() === userEmail.toLowerCase())
     : [];
@@ -722,15 +725,19 @@ function AuthorView({
           {hasProposal ? displayStatus(chapter?.status ?? "pending_review") : "Proposal not submitted"}
         </span>
       </div>
+      <section className="author-next-step">
+        <div><p className="eyebrow">Your next step</p><h3>{defaultAuthorTab==='draft'?`Upload your ${draftLabel.toLowerCase()}`:defaultAuthorTab==='proposal'?hasProposal?'Revise your proposal':'Submit your proposal':defaultAuthorTab==='agreement'?'Review and sign your agreement':defaultAuthorTab==='materials'?'Submit your final author details':chapter?.status==='pending_review'?'Your proposal is awaiting an editorial decision':'View your submitted work and feedback'}</h3></div>
+        <button type="button" onClick={()=>setAuthorTab(defaultAuthorTab)}>{defaultAuthorTab==='draft'?'Upload draft':defaultAuthorTab==='agreement'?'Open agreement':defaultAuthorTab==='materials'?'Open author details':defaultAuthorTab==='proposal'?'Open proposal':'Open work & feedback'}</button>
+      </section>
       <nav className="author-task-nav" aria-label="Author tasks">
-        {authorTabs.map((tab) => <button key={tab.id} type="button" aria-pressed={authorTab === tab.id} className={authorTab === tab.id ? "active" : ""} onClick={() => setAuthorTab(tab.id)}><strong>{tab.label}</strong><small>{tab.detail}</small></button>)}
+        {authorTabs.map((tab) => <button key={tab.id} type="button" data-state={/action required|requested|ready to upload|^ready/i.test(tab.detail)?'action':/signed|submitted|received/i.test(tab.detail)?'complete':'info'} aria-pressed={authorTab === tab.id} className={authorTab === tab.id ? "active" : ""} onClick={() => setAuthorTab(tab.id)}><strong>{tab.label}</strong><small>{tab.detail}</small></button>)}
       </nav>
       <div className="author-grid compact-author-grid" data-section={authorTab}>
         <section className="panel author-deadlines"><div className="section-heading"><p className="eyebrow">Project dates</p><h2>Deadlines</h2></div><DeadlineStrip book={book} /></section>
-        <section className="panel proposal-panel">
+        {showProposalForm ? <section className="panel proposal-panel">
           <div className="section-heading">
-            <p className="eyebrow">First stage</p>
-            <h2>{book.project_type === "magazine" ? "Submit article proposal" : "Submit chapter proposal"}</h2>
+            <p className="eyebrow">{hasProposal?'Proposal revision':'Getting started'}</p>
+            <h2>{hasProposal?'Revise your proposal':book.project_type === "magazine" ? "Submit article proposal" : "Submit chapter proposal"}</h2>
           </div>
           {proposalApproved ? (
             <div className="notice">Your proposal is approved. <button type="button" onClick={() => setAuthorTab("draft")}>Open draft upload</button></div>
@@ -748,7 +755,7 @@ function AuthorView({
               <button className="primary" type="submit">{hasProposal ? "Update proposal" : "Submit proposal"}</button>
             </form>
           )}
-        </section>
+        </section> : null}
         <section className="panel draft-panel">
           <div className="section-heading"><p className="eyebrow">Manuscript upload</p><h2>{draftLabel} manuscript</h2></div>
           {workflow.canUpload ? (
@@ -778,6 +785,7 @@ function AuthorView({
             <p className="muted">This is the work ChapterFlow currently has recorded against your author profile.</p>
           </div>
           <ReviewHistory reviews={chapter?.reviews ?? []} />
+          {hasProposal ? <details className="submitted-proposal"><summary>View submitted proposal{chapter?.stage.includes('proposal')?` · ${displayStatus(chapter.status)}`:''}</summary><h3>{chapter?.title}</h3>{chapter?.abstract?<p>{chapter.abstract}</p>:null}{chapter?.proposal_outline?<p>{chapter.proposal_outline}</p>:null}{chapter?.status==='pending_review'?<p className="muted">Your proposal is with the editor. Draft upload opens after approval.</p>:null}</details> : null}
           {(chapter?.peer_review_feedback_packets ?? []).filter((packet) => packet.status === "sent").map((packet) => <details className="received-review-text" key={packet.id}><summary>Peer review feedback · {formatDate(packet.sent_at)}</summary><pre>{packet.body}</pre></details>)}
           {submissions.length ? (
             <div className="submission-list">

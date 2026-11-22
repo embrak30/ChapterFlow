@@ -1,11 +1,11 @@
 :root {
-  --bg: #f6f7f9;
+  --bg: #f3f7f8;
   --panel: #ffffff;
   --ink: #18202f;
   --muted: #667085;
   --line: #dde2ea;
-  --brand: #235c88;
-  --brand-dark: #184766;
+  --brand: #21666a;
+  --brand-dark: #174e51;
   --good: #167a4a;
   --warn: #9a5b00;
   --bad: #b42318;
@@ -248,13 +248,23 @@ textarea { min-height: 110px; resize: vertical; }
 .anonymisation-editor > textarea { min-height: 55vh; line-height: 1.7; font-size: 1rem; padding: 1.2rem; }
 .peer-prep-grid:has(.anonymisation-editor textarea) { grid-template-columns: minmax(0, 1fr); }
 .author-view { gap: .65rem; }
-.author-summary { padding: .8rem 1rem; }
+.author-summary { padding: .8rem 1rem; background: #eaf4f2; border-color: #c9e0da; border-left: 4px solid #347b73; }
+.author-next-step { display: flex; align-items: center; justify-content: space-between; gap: .8rem; padding: .8rem 1rem; background: #edf3fa; border: 1px solid #ceddeb; border-radius: 8px; }
+.author-next-step h3 { font-size: 1rem; }
+.author-next-step .eyebrow { margin-bottom: .25rem; }
+.submitted-proposal { padding: .85rem; background: #f1f6f8; border: 1px solid var(--line); border-radius: 7px; }
+.submitted-proposal summary { font-weight: 700; cursor: pointer; }
+.submitted-proposal h3, .submitted-proposal p { margin-top: .6rem; white-space: pre-wrap; }
+.admin-hero { border-top: 3px solid #347b73; }
 .author-summary .eyebrow { margin-bottom: .2rem; }
 .author-summary p { font-size: .88rem; }
 .author-task-nav { display: flex; flex-wrap: wrap; gap: .4rem; }
 .author-task-nav button { flex: 1 1 150px; display: grid; gap: .25rem; text-align: left; padding: .65rem .8rem; min-width: 0; }
+.author-task-nav button[data-state="info"] { border-top: 3px solid #7d9fb7; }
+.author-task-nav button[data-state="action"] { border-top: 3px solid #b88b36; background: #fffcf4; }
+.author-task-nav button[data-state="complete"] { border-top: 3px solid #549179; background: #f3faf6; }
 .author-task-nav small { font-weight: 400; color: var(--muted); overflow-wrap: anywhere; }
-.author-task-nav button.active { background: #eef6fb; border-color: var(--brand); }
+.author-task-nav button.active { background: #e5f1ef; border-color: var(--brand); }
 .author-task-nav button:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
 .compact-author-grid { grid-template-columns: minmax(0, 1fr); gap: .65rem; }
 .compact-author-grid > .panel:not(.author-deadlines) { display: none; }
@@ -279,6 +289,7 @@ textarea { min-height: 110px; resize: vertical; }
 .admin-hero .stat strong { font-size: 1.2rem; }
 .admin-hero .admin-tabs button { padding: .55rem .7rem; }
 @media (max-width: 760px) {
+  .author-next-step { align-items: stretch; flex-direction: column; }
   .compact-author-grid .author-deadlines { grid-template-columns: 1fr; gap: .5rem; }
   .compact-author-grid .date-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .3rem; }
   .compact-author-grid .date-strip span { overflow-wrap: anywhere; }

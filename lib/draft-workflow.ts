@@ -1,4 +1,8 @@
 type DraftChapter = { stage: string; status: string; submissions?: { stage: string; submission_files?: unknown[] }[]; peer_review_feedback_packets?: { status: string }[]; chapter_production?: {third_draft_requested_at:string|null;editorial_state:string} | {third_draft_requested_at:string|null;editorial_state:string}[] | null };
+export function canEditProposal(chapter?: DraftChapter | null) {
+  if(!chapter) return true;
+  return chapter.stage.includes('proposal') && chapter.status==='revision_requested' && !chapter.submissions?.some(submission=>submission.stage.includes('draft') && submission.submission_files?.length);
+}
 export function draftWorkflow(chapter?: DraftChapter) {
   const firstDraft = Boolean(chapter?.submissions?.some((submission) => submission.stage === "first_draft" && submission.submission_files?.length));
   const secondDraft = Boolean(chapter?.submissions?.some((submission) => submission.stage === "second_draft" && submission.submission_files?.length));
