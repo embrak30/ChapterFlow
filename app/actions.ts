@@ -1066,13 +1066,16 @@ export async function createPeerReviewBatch(_previous: { success: boolean; error
   try {
     const { supabase } = await getSignedInProfile();
     await requireProjectEditor(supabase, formData);
-    const { data, error } = await supabase.rpc("create_peer_review_batch", {
+    const pairMode=textValue(formData,"batch_mode")==='editor_pair';
+    const batchPayload={
       p_book_id: textValue(formData, "book_id"),
       p_name: textValue(formData, "batch_name"),
       p_chapter_ids: formValues(formData, "chapter_ids"),
-      p_deadline: optionalDate(formData, "batch_deadline"),
-      p_count: Number(textValue(formData, "batch_review_count"))
-    });
+      p_deadline: optionalDate(formData, "batch_deadline")
+    };
+    const { data, error } = pairMode
+      ? await supabase.rpc("create_editor_pair_batch",batchPayload)
+      : await supabase.rpc("create_peer_review_batch",{...batchPayload,p_count:Number(textValue(formData,"batch_review_count"))});
     if (error || !data) throw new Error(error?.message ?? "The batch could not be created.");
     revalidatePath("/");
     return { success: true, error: "", batchId: String(data) };
@@ -1138,24 +1141,18 @@ export async function generatePeerReviewAssignments(formData: FormData) {
     const siteUrl = getSiteUrl();
     const assignmentsByReviewer = new Map<string, { email: string; name: string; chapters: string[] }>();
 
-    const { data: unsent, error: unsentError } = await supabase.from("peer_review_assignments").select("id, chapter_id, reviewer_id").eq("book_id", bookId).eq("batch_id", batchId).is("notified_at", null).neq("status", "completed");
+    const { data: unsent, error: unsentError } = await supabase.from("peer_review_assignments").select("id, chapter_id, reviewer_id, reviewer:reviewer_id(full_name,email), chapter:chapter_id(title)").eq("book_id", bookId).eq("batch_id", batchId).is("notified_at", null).neq("status", "completed");
     if (unsentError) throw new Error(unsentError.message);
-    eligibleChapters.forEach((chapter) => {
-      const reviewerChapters = eligibleChapters.filter((candidate) => (unsent ?? []).some((assignment) => assignment.chapter_id === chapter.id && assignment.reviewer_id === candidate.author_id));
-      reviewerChapters.forEach((reviewerChapter) => {
-        const reviewerProfile = Array.isArray(reviewerChapter.profiles) ? reviewerChapter.profiles[0] : reviewerChapter.profiles;
-        if (!reviewerProfile?.email) return;
-        const current = assignmentsByReviewer.get(reviewerChapter.author_id) ?? {
-          email: reviewerProfile.email,
-          name: reviewerProfile.full_name || "there",
-          chapters: [] as string[]
-        };
-        current.chapters.push(chapter.title);
-        assignmentsByReviewer.set(reviewerChapter.author_id, current);
-      });
-    });
+    for (const assignment of unsent ?? []) {
+      const person=Array.isArray(assignment.reviewer)?assignment.reviewer[0]:assignment.reviewer;
+      const assignedChapter=Array.isArray(assignment.chapter)?assignment.chapter[0]:assignment.chapter;
+      if (!person?.email) throw new Error("An assigned reviewer has no profile email. Check the batch team before sending invitations.");
+      const current: {email:string;name:string;chapters:string[]}=assignmentsByReviewer.get(assignment.reviewer_id) ?? {email:person.email,name:person.full_name || "there",chapters:[]};
+      current.chapters.push(assignedChapter?.title || "Assigned chapter");
+      assignmentsByReviewer.set(assignment.reviewer_id,current);
+    }
 
-    for (const reviewer of assignmentsByReviewer.values()) {
+    for (const [reviewerId, reviewer] of assignmentsByReviewer.entries()) {
       const subject = "Your blind peer review assignments are ready";
       const chapterList = reviewer.chapters.map((title, index) => `${index + 1}. ${title}`).join("\n");
       const body = [
@@ -1189,12 +1186,11 @@ export async function generatePeerReviewAssignments(formData: FormData) {
       `;
 
       await sendResendEmail({ to: reviewer.email, subject, text: body, html });
-      const reviewerId = eligibleChapters.find((chapter) => {
-        const person = Array.isArray(chapter.profiles) ? chapter.profiles[0] : chapter.profiles;
-        return person?.email === reviewer.email;
-      })?.author_id;
-      const ids = (unsent ?? []).filter((assignment) => assignment.reviewer_id === reviewerId && eligibleChapters.some((chapter) => chapter.id === assignment.chapter_id)).map((assignment) => assignment.id);
-      if (ids.length) await supabase.from("peer_review_assignments").update({ notified_at: new Date().toISOString() }).in("id", ids);
+      const ids=(unsent ?? []).filter(assignment=>assignment.reviewer_id===reviewerId).map(assignment=>assignment.id);
+      if(ids.length) {
+        const {error:notificationError}=await supabase.from("peer_review_assignments").update({notified_at:new Date().toISOString()}).in("id",ids);
+        if(notificationError) throw new Error("The invitation was sent but its delivery record could not be saved. Check before sending again.");
+      }
     }
   }
 

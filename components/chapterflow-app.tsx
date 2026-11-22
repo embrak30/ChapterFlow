@@ -1298,13 +1298,15 @@ function BulkEmailButton({ disabled }: { disabled: boolean }) {
 }
 
 function ReviewBatchBuilder({ bookId, chapters, onCreated }: { bookId: string; chapters: ChapterRecord[]; onCreated: (id: string) => void }) {
+  const [batchMode,setBatchMode]=useState<'standard'|'editor_pair'>('standard');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [reviewCount, setReviewCount] = useState(2);
   const [confirmed, setConfirmed] = useState(false);
   const [state, action, pending] = useActionState(createPeerReviewBatch, { success: false, error: "", batchId: "" });
   useEffect(() => { if (state.success && state.batchId) onCreated(state.batchId); }, [state, onCreated]);
   const selected = chapters.filter((chapter) => selectedIds.includes(chapter.id)).map((chapter) => chapter.id);
-  const preview = previewReviewBatch(selected, reviewCount);
+  const effectiveCount=batchMode==='editor_pair'?2:reviewCount;
+  const preview = previewReviewBatch(selected, effectiveCount,batchMode);
   function participantName(id: string) {
     const chapter = chapters.find((entry) => entry.id === id);
     return chapter?.profiles?.full_name || chapter?.profiles?.email || "Author";
@@ -1315,13 +1317,15 @@ function ReviewBatchBuilder({ bookId, chapters, onCreated }: { bookId: string; c
     <div className="form-grid">
       <label>Batch name<input name="batch_name" required placeholder="Second intake" /></label>
       <label>Review deadline<input name="batch_deadline" type="date" required /></label>
-      <label>Reviews per chapter<select name="batch_review_count" value={reviewCount} onChange={(event) => { setReviewCount(Number(event.target.value)); setConfirmed(false); }}><option value="2">Two</option><option value="3">Three</option></select></label>
+      <label>Batch type<select name="batch_mode" value={batchMode} onChange={event=>{setBatchMode(event.target.value as 'standard'|'editor_pair');setConfirmed(false);}}><option value="standard">Authors review each other</option><option value="editor_pair">Two authors + me as editor</option></select></label>
+      <label>Reviews per chapter<select name="batch_review_count" value={effectiveCount} disabled={batchMode==='editor_pair'} onChange={(event) => { setReviewCount(Number(event.target.value)); setConfirmed(false); }}><option value="2">Two</option><option value="3">Three</option></select></label>
     </div>
+    {batchMode==='editor_pair'?<p className="muted">Select exactly two authors. They review each other; you receive both chapters as the second reviewer. Your editorial decision remains separate.</p>:null}
     <fieldset className="checklist-field"><legend>Select ready, unassigned participants ({selected.length})</legend>
       {chapters.map((chapter) => <label className="check-row" key={chapter.id}><input type="checkbox" name="chapter_ids" value={chapter.id} checked={selected.includes(chapter.id)} disabled={pending} onChange={(event) => { setSelectedIds(event.target.checked ? [...selected, chapter.id] : selected.filter((id) => id !== chapter.id)); setConfirmed(false); }} /><span>{participantName(chapter.id)} · {chapter.title}</span></label>)}
       {!chapters.length ? <p className="muted">No unassigned chapters are ready. Submit first drafts and approve their anonymised copies to include them here.</p> : null}
     </fieldset>
-    {preview.length ? <section className="peer-coverage-list"><h3>Assignment preview</h3>{selected.map((id) => <div key={id}><strong>{participantName(id)} reviews:</strong><ul>{preview.filter((entry) => entry.reviewerChapterId === id).map((entry) => <li key={entry.chapterId}>{chapters.find((chapter) => chapter.id === entry.chapterId)?.title}</li>)}</ul></div>)}<p className="muted">{selected.length} participants · {preview.length} assignments · {reviewCount} reviews per chapter</p></section> : <p className="muted">Select at least {reviewCount + 1} participants to preview assignments.</p>}
+    {preview.length ? <section className="peer-coverage-list"><h3>Assignment preview</h3>{[...selected,...(batchMode==='editor_pair'?['editor']:[])].map((id) => <div key={id}><strong>{id==='editor'?'You (editor)':participantName(id)} reviews:</strong><ul>{preview.filter((entry) => entry.reviewerChapterId === id).map((entry) => <li key={entry.chapterId}>{chapters.find((chapter) => chapter.id === entry.chapterId)?.title}</li>)}</ul></div>)}<p className="muted">{selected.length} authors{batchMode==='editor_pair'?' + you as editor':''} · {preview.length} assignments · {effectiveCount} reviews per chapter</p></section> : <p className="muted">{batchMode==='editor_pair'?'Select exactly two authors to preview the four assignments.':`Select at least ${reviewCount+1} participants to preview assignments.`}</p>}
     <label className="check-row"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} /><span>I have checked the participants and assignment preview.</span></label>
     <button className="primary" disabled={pending || !preview.length || !confirmed} type="submit">{pending ? "Creating batch..." : "Create batch and assignments"}</button>
     {state.error ? <p role="alert">{state.error}</p> : null}
