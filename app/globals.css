@@ -183,6 +183,16 @@ textarea { min-height: 110px; resize: vertical; }
 .check-row span { color: var(--muted); font-size: .9rem; font-weight: 700; line-height: 1.35; }
 .peer-admin { gap: 1rem; }
 .chapter-tracker { display: grid; gap: .8rem; }
+.chapter-back { justify-self: start; }
+.chapter-focus header { display: grid; gap: .4rem; }
+.chapter-focus h2 { scroll-margin-top: 1rem; }
+.chapter-focus-section { display: grid; gap: .8rem; }
+.chapter-focus-section[hidden] { display: none; }
+.chapter-focus-section > .button-link { justify-self: start; }
+.chapter-milestones { display: grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap: .7rem; margin: 0; }
+.chapter-milestones div { padding: .75rem 0; border-bottom: 1px solid var(--line); }
+.chapter-milestones dt { font-weight: 700; font-size: .88rem; }
+.chapter-milestones dd { margin: .3rem 0 0; font-size: .9rem; color: var(--muted); }
 .tracking-table-wrap { overflow-x: auto; }
 .tracking-table { width: 100%; min-width: 1050px; border-collapse: collapse; font-size: .86rem; }
 .tracking-table th, .tracking-table td { padding: .7rem; text-align: left; vertical-align: top; border: 1px solid var(--line); }

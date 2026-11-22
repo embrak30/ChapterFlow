@@ -1147,7 +1147,7 @@ function AdminView({
       </div>
 
       <div className="admin-tab-panel">
-        {adminTab === 'tracking' ? <ChapterTracker chapters={chapters} assignments={peerReviewAssignments} batches={reviewBatches} required={peerReviewSettings?.required_review_count ?? 2} acceptances={agreementAcceptances} agreementId={agreement?.id}/> : null}
+        {adminTab === 'tracking' ? <ChapterTracker chapters={chapters} assignments={peerReviewAssignments} batches={reviewBatches} required={peerReviewSettings?.required_review_count ?? 2} acceptances={agreementAcceptances} agreementId={agreement?.id} onOpenPeerReview={()=>setAdminTab('peer-review')}/> : null}
         {adminTab === "proposals" ? <ReviewWorkspace title="Admin Proposal Board" book={book} chapters={chapters} canDecide /> : null}
         {adminTab === "peer-review" ? <PeerReviewAdminPanel batches={reviewBatches} book={book} chapters={approvedChapters} settings={peerReviewSettings} assignments={peerReviewAssignments} /> : null}
         {adminTab === "agreements" ? <AgreementAdminPanel book={book} chapters={approvedChapters} agreement={agreement} acceptances={agreementAcceptances} /> : null}

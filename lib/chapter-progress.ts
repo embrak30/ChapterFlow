@@ -9,7 +9,7 @@ export type TrackingChapter = {
   id: string; title: string; stage: string; status: string;
   profiles?: { full_name: string | null; email: string | null } | null;
   editorial_submission_id?: string | null;
-  submissions?: { id: string; stage: string; created_at: string; submission_files?: unknown[] }[];
+  submissions?: { id: string; stage: string; created_at: string; submission_files?: { id: string; file_name?: string }[] }[];
   peer_review_feedback_packets?: { status: string; sent_at: string | null; included_review_ids?: string[] }[];
   email_logs?: { status: string; sent_at: string | null; subject: string; email_kind?: string | null }[];
   chapter_production?: ProductionRecord | ProductionRecord[] | null;
