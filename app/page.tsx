@@ -46,9 +46,9 @@ export default async function Home() {
     .select("*")
     .order("created_at", { ascending: true });
 
-  const { data: chapters } = await supabase
+  const { data: chapters, error: chaptersError } = await supabase
     .from("chapters")
-    .select("*, profiles:author_id(full_name, email), submissions(*, submission_files(*)), reviews(*), peer_review_files(*), peer_review_feedback_packets(id, status, sent_at, body)")
+    .select("*, profiles:author_id(full_name, email), submissions(*, submission_files(*)), reviews(*), peer_review_files(*), peer_review_feedback_packets(id, status, sent_at, body, included_review_ids), chapter_production(*), email_logs(id, subject, status, sent_at, email_kind)")
     .order("created_at", { ascending: false });
   const { data: peerReviewSettings, error: peerReviewSettingsError } = await supabase
     .from("peer_review_settings")
@@ -78,6 +78,7 @@ export default async function Home() {
       userEmail={user?.email}
       userName={profileName}
       userRole={userRole}
+      chapterLoadError={chaptersError?.message}
       peerReviewSettingsError={peerReviewSettingsError?.message ?? peerReviewAssignmentsError?.message ?? reviewBatchesError?.message}
       reviewBatches={reviewBatches ?? []}
       isSuperAdmin={Boolean(isSuperAdmin)}

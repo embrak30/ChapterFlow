@@ -177,7 +177,7 @@ async function saveDraftUpload({
   responseToFeedback: string;
   file: File;
   fileName: string;
-  draftStage: "first_draft" | "second_draft";
+  draftStage: "first_draft" | "second_draft" | "final_materials";
 }) {
   const { data: book } = await supabase
     .from("books")
@@ -234,7 +234,7 @@ async function saveDraftUpload({
     .update({
       stage: draftStage,
       status: "submitted",
-      current_deadline: draftStage === "second_draft" ? book?.final_materials_deadline ?? null : book?.second_draft_deadline ?? null,
+      current_deadline: draftStage === "final_materials" ? null : draftStage === "second_draft" ? book?.final_materials_deadline ?? null : book?.second_draft_deadline ?? null,
       updated_at: new Date().toISOString()
     })
     .eq("id", chapterId);
@@ -517,7 +517,7 @@ async function persistAuthorDraft(formData: FormData) {
 
   const { data: chapter, error: chapterError } = await supabase
     .from("chapters")
-    .select("id, title, author_id, stage, status, submissions(stage, submission_files(id)), peer_review_feedback_packets(status)")
+    .select("id, title, author_id, stage, status, submissions(stage, submission_files(id)), peer_review_feedback_packets(status), chapter_production(third_draft_requested_at, editorial_state)")
     .eq("id", chapterId)
     .eq("book_id", bookId)
     .eq("author_id", user.id)
@@ -558,7 +558,8 @@ export async function adminUploadDraftManuscript(formData: FormData) {
   const bookId = textValue(formData, "book_id");
   const chapterId = textValue(formData, "chapter_id");
   const responseToFeedback = textValue(formData, "response_to_feedback");
-  const draftStage = textValue(formData, "draft_stage") === "second_draft" ? "second_draft" : "first_draft";
+  const requestedStage=textValue(formData,"draft_stage");
+  const draftStage = requestedStage === "final_materials" ? "final_materials" : requestedStage === "second_draft" ? "second_draft" : "first_draft";
   const { file, fileName } = getDraftFile(formData);
 
   if (!bookId || !chapterId) {
@@ -596,11 +597,61 @@ export async function selectEditorialDraft(formData: FormData) {
   await requireProjectEditor(supabase, formData);
   const chapterId = textValue(formData, "chapter_id");
   const submissionId = textValue(formData, "submission_id");
-  const { data: submission } = await supabase.from("submissions").select("id, submission_files(id)").eq("id", submissionId).eq("chapter_id", chapterId).eq("stage", "second_draft").single();
+  const { data: submission } = await supabase.from("submissions").select("id, stage, submission_files(id)").eq("id", submissionId).eq("chapter_id", chapterId).in("stage", ["second_draft","final_materials"]).single();
   if (!submission?.submission_files?.length) throw new Error("Select an uploaded second draft belonging to this chapter.");
-  const { data: saved, error } = await supabase.from("chapters").update({ editorial_submission_id: submissionId, stage: "second_draft", status: "submitted", updated_at: new Date().toISOString() }).eq("id", chapterId).select("editorial_submission_id").single();
+  const { data: saved, error } = await supabase.from("chapters").update({ editorial_submission_id: submissionId, stage: submission.stage, status: "submitted", updated_at: new Date().toISOString() }).eq("id", chapterId).select("editorial_submission_id").single();
   if (error || saved?.editorial_submission_id !== submissionId) throw new Error(error?.message ?? "The editorial draft selection could not be verified.");
   revalidatePath("/");
+}
+
+export async function saveChapterProduction(_previous: { success: boolean; error: string }, formData: FormData) {
+  try {
+    const { supabase, user } = await getSignedInProfile();
+    await requireProjectEditor(supabase, formData);
+    const chapterId = textValue(formData, "chapter_id");
+    const mode = textValue(formData, "mode");
+    if (!["save","revision","materials","agreement"].includes(mode)) throw new Error("Choose an editorial action.");
+    const { data: chapter } = await supabase.from("chapters").select("id, title, book_id, editorial_submission_id, profiles:author_id(full_name,email), submissions(stage,submission_files(id))").eq("id",chapterId).single();
+    if (!chapter) throw new Error("The chapter was not found.");
+    const state = mode==='revision' ? 'revision_requested' : textValue(formData,"editorial_state");
+    const notes = textValue(formData,"editorial_notes");
+    if ((mode==='revision' || state==='complete') && !chapter.submissions.some((submission)=>submission.stage==='second_draft' && submission.submission_files.length)) throw new Error("A second draft is needed before this editorial action.");
+    if (mode!=='agreement' && state==='complete' && !chapter.editorial_submission_id) throw new Error("Select the working manuscript for editorial review before marking the review complete.");
+    const payload={p_chapter_id:chapterId,p_state:state,p_notes:notes,p_revision_sent:false,p_materials_sent:false};
+    if (mode!=='agreement') {
+      const { error }=await supabase.rpc("record_chapter_production",payload);
+      if(error) throw new Error(error.message);
+    }
+    if (mode!=='save') {
+      const author=Array.isArray(chapter.profiles)?chapter.profiles[0]:chapter.profiles;
+      if(!author?.email) throw new Error("No author email is recorded.");
+      if(mode==='agreement') {
+        const { data: agreement }=await supabase.from("book_agreements").select("id").eq("book_id",chapter.book_id).eq("is_active",true).limit(1).maybeSingle();
+        if(!agreement) throw new Error("Open the project agreement before sending a signing request.");
+      }
+      const subject=mode==='revision'?`Further revision requested: ${chapter.title}`:mode==='materials'?`Final author details for ${chapter.title}`:`Please sign your author agreement for ${chapter.title}`;
+      const instruction=mode==='revision'?"Please upload a third/final draft addressing the editorial feedback through Draft upload in ChapterFlow. Your earlier drafts will be retained.":mode==='materials'?"Please open Final author details in your ChapterFlow author dashboard and submit your current publication biography and institutional affiliation.":"Please open Agreement in your ChapterFlow author dashboard, read the publication terms and complete the signing confirmations.";
+      const body=`Dear ${author.full_name || 'Author'},\n\n${instruction}\n\nChapter: ${chapter.title}\n\n${notes ? `${notes}\n\n` : ''}Sign in: ${getSiteUrl()}\n\nBest wishes,\nThe editorial team`;
+      await sendResendEmail({to:author.email,subject,text:body,html:`<p>${escapeHtml(body)}</p>`});
+      if(mode!=='agreement') {
+        const { error }=await supabase.rpc("record_chapter_production",{...payload,p_revision_sent:mode==='revision',p_materials_sent:mode==='materials'});
+        if(error) throw new Error(`Email sent, but milestone recording failed: ${error.message}. Do not resend before checking.`);
+      }
+      const { error }=await supabase.from("email_logs").insert({chapter_id:chapterId,recipient_email:author.email,subject,body,status:'sent',sent_by:user.id,sent_at:new Date().toISOString(),email_kind:mode==='agreement'?'agreement_request':mode==='revision'?'third_draft_request':'final_materials_request'});
+      if(error) throw new Error(`Email sent, but the send log could not be saved: ${error.message}. Do not resend before checking.`);
+    }
+    revalidatePath("/");
+    return {success:true,error:""};
+  } catch(error) { return {success:false,error:error instanceof Error?error.message:"The milestone could not be saved."}; }
+}
+
+export async function submitFinalAuthorMaterials(_previous: {success:boolean;error:string},formData:FormData) {
+  try {
+    const {supabase}=await getSignedInProfile();
+    const {error}=await supabase.rpc("submit_final_author_materials",{p_chapter_id:textValue(formData,"chapter_id"),p_biography:textValue(formData,"biography"),p_affiliation:textValue(formData,"affiliation")});
+    if(error) throw new Error(error.message);
+    revalidatePath("/"); return {success:true,error:""};
+  } catch(error) { return {success:false,error:error instanceof Error?error.message:"Your details could not be saved."}; }
 }
 
 export async function uploadAnonymisedReviewCopy(formData: FormData) {
@@ -1317,6 +1368,8 @@ export async function sendPeerReviewFeedbackPacket(formData: FormData) {
   if (!chapterId || !includedReviewIds.length) {
     throw new Error("Choose at least one peer review to send.");
   }
+  const { data: includedReviews, error: includedError } = await supabase.from("peer_reviews").select("id").eq("chapter_id", chapterId).in("id", includedReviewIds);
+  if (includedError || includedReviews?.length !== new Set(includedReviewIds).size) throw new Error("Some selected reviews do not belong to this chapter or are not available.");
 
   const { data: chapter, error: chapterError } = await supabase
     .from("chapters")
@@ -1364,7 +1417,7 @@ export async function sendPeerReviewFeedbackPacket(formData: FormData) {
 
   try {
     await sendResendEmail({ to: author.email, subject, text: body, html });
-    await supabase.from("peer_review_feedback_packets").insert({
+    const { error: packetError } = await supabase.from("peer_review_feedback_packets").insert({
       chapter_id: chapterId,
       sent_by: user.id,
       included_review_ids: includedReviewIds,
@@ -1373,6 +1426,7 @@ export async function sendPeerReviewFeedbackPacket(formData: FormData) {
       status: "sent",
       sent_at: new Date().toISOString()
     });
+    if (packetError) throw new Error(`Feedback email sent, but its tracking record could not be saved: ${packetError.message}. Check before sending again.`);
     await supabase.from("email_logs").insert({
       chapter_id: chapterId,
       recipient_email: author.email,
