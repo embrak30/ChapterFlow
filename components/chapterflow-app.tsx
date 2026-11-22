@@ -11,6 +11,7 @@ import { ChapterTracker, FinalAuthorMaterials } from "@/components/chapter-track
 import type { ProductionRecord } from "@/lib/chapter-progress";
 import { AnonymisationEditor } from "@/components/anonymisation-editor";
 import { previewReviewBatch } from "@/lib/review-batch";
+import { reviewReadiness } from "@/lib/review-readiness";
 import { createPeerReviewBatch, sendPeerReviewBatchEmails } from "@/app/actions";
 import { manageProjectMember, createMagazineIssue } from "@/app/actions";
 
@@ -1149,7 +1150,7 @@ function AdminView({
       <div className="admin-tab-panel">
         {adminTab === 'tracking' ? <ChapterTracker chapters={chapters} assignments={peerReviewAssignments} batches={reviewBatches} required={peerReviewSettings?.required_review_count ?? 2} acceptances={agreementAcceptances} agreementId={agreement?.id} onOpenPeerReview={()=>setAdminTab('peer-review')}/> : null}
         {adminTab === "proposals" ? <ReviewWorkspace title="Admin Proposal Board" book={book} chapters={chapters} canDecide /> : null}
-        {adminTab === "peer-review" ? <PeerReviewAdminPanel batches={reviewBatches} book={book} chapters={approvedChapters} settings={peerReviewSettings} assignments={peerReviewAssignments} /> : null}
+        {adminTab === "peer-review" ? <PeerReviewAdminPanel batches={reviewBatches} book={book} chapters={chapters} settings={peerReviewSettings} assignments={peerReviewAssignments} /> : null}
         {adminTab === "agreements" ? <AgreementAdminPanel book={book} chapters={approvedChapters} agreement={agreement} acceptances={agreementAcceptances} /> : null}
         {adminTab === "authors" ? <ApprovedAuthorsPanel book={book} chapters={approvedChapters} /> : null}
         {adminTab === "call" ? <CallSettingsForm book={book.id ? book : undefined} hasBooks={books.length > 0} canCreate={isSuperAdmin} /> : null}
@@ -1364,9 +1365,9 @@ function PeerReviewAdminPanel({
   }).filter(({ chapter }) => !activeBatch || assignments.some((assignment) => assignment.chapter_id === chapter.id));
   const selectedChapter = chapters.find((chapter) => chapter.id === selectedChapterId) ?? chapters[0];
   const incompleteAssignments = assignments.filter((assignment) => !assignment.peer_reviews?.length && assignment.status !== "completed");
-  const readyChapters = chapters.filter((chapter) => chapter.status === "submitted" && chapter.stage === "first_draft" &&
-    chapter.submissions?.some((submission) => submission.stage === "first_draft" && submission.submission_files?.length) && latestApprovedReviewCopy(chapter));
-  const unassignedChapters = readyChapters.filter((chapter) => !allAssignments.some((assignment) => assignment.chapter_id === chapter.id || assignment.reviewer_id === chapter.author_id));
+  const readyChapters = chapters.filter((chapter) => reviewReadiness(chapter,[])===null);
+  const unassignedChapters = chapters.filter((chapter) => reviewReadiness(chapter,allAssignments)===null);
+  const excludedChapters = chapters.filter((chapter) => reviewReadiness(chapter,allAssignments)!==null);
   const reviewerIds = [...new Set([...(activeBatch ? [] : readyChapters.map((chapter) => chapter.author_id).filter((id): id is string => Boolean(id))), ...assignments.map((assignment) => assignment.reviewer_id)])];
   const feedbackChapters = chapters.filter((chapter) => !activeBatch || assignments.some((assignment) => assignment.chapter_id === chapter.id));
   const packetChapter = feedbackChapters.find((chapter) => chapter.id === selectedChapterId) ?? feedbackChapters[0];
@@ -1398,6 +1399,7 @@ function PeerReviewAdminPanel({
       <label>Review group<select value={batchFilter} onChange={(event) => setBatchFilter(event.target.value)}><option value="all">All batches</option>{batches.map((batch) => <option value={batch.id} key={batch.id}>{batch.name} · {formatDate(batch.review_deadline)}</option>)}</select></label>
       <section hidden={peerSection !== "assignments"} className="peer-coverage-list peer-section">
         <ReviewBatchBuilder bookId={book.id} chapters={unassignedChapters} onCreated={setBatchFilter} />
+        <details><summary>Why other chapters are not selectable ({excludedChapters.length})</summary>{excludedChapters.map(chapter=><p key={chapter.id}><strong>{chapter.profiles?.full_name || 'Author'} · {chapter.title}</strong><br/>{reviewReadiness(chapter,allAssignments)}</p>)}</details>
       </section>
       <section hidden={peerSection !== "progress"} className="table-panel peer-section">
         <h3>Reviewer progress</h3>
@@ -1444,7 +1446,7 @@ function PeerReviewAdminPanel({
             return (
               <button className={`peer-coverage-row ${selectedChapter?.id === chapter.id ? "selected" : ""}`} key={chapter.id} onClick={() => setSelectedChapterId(chapter.id)} type="button">
                 <span>{chapter.title}</span>
-                <small>{reviewCopy ? `Ready for blind review · ${reviewCopy.file_name}` : "Needs anonymised review copy"}</small>
+                <small>{reviewCopy ? `${reviewReadiness(chapter,[]) ?? 'Ready for blind review'} · ${reviewCopy.file_name}` : "Needs anonymised review copy"}</small>
               </button>
             );
           }) : <p className="muted">Approved chapters will appear here when they are ready for peer review preparation.</p>}
