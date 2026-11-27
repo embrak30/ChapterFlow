@@ -1568,14 +1568,30 @@ function PeerReviewPacketEditor({
   requiredReviewCount: number;
 }) {
   const completedAssignments = assignments.filter((assignment) => assignment.peer_reviews?.length);
+  const [sendState, sendAction, sending] = useActionState(async (_previous: { sent: boolean; error: string }, formData: FormData) => {
+    try {
+      await sendPeerReviewFeedbackPacket(formData);
+      return { sent: true, error: "" };
+    } catch (error) {
+      return { sent: false, error: error instanceof Error ? error.message : "Sending could not be confirmed. Check the chapter's send history before trying again." };
+    }
+  }, { sent: false, error: "" });
+  const lastSent = (chapter.peer_review_feedback_packets ?? [])
+    .filter((packet) => packet.status === "sent" && packet.sent_at)
+    .sort((a, b) => String(b.sent_at).localeCompare(String(a.sent_at)))[0];
   return (
-    <form action={sendPeerReviewFeedbackPacket} className="peer-packet-editor" id="peer-review-packet">
+    <form action={sendAction} className="peer-packet-editor" id="peer-review-packet" aria-busy={sending} onSubmit={(event) => {
+      if (sending || sendState.sent || (lastSent && !window.confirm("Reviews have already been sent to this author. Send another email with the selected reviews?"))) event.preventDefault();
+    }}>
       <input type="hidden" name="chapter_id" value={chapter.id} />
       <div>
         <h3>Review packet for author</h3>
         <h2>{chapter.title}</h2>
         <p className="muted">{completedAssignments.length}/{requiredReviewCount} reviews received. Select the reviews to include, edit the author-facing text if needed, then send the anonymised packet.</p>
       </div>
+      {lastSent && !sendState.sent ? <div className="notice" role="status">Reviews previously sent to author on {new Date(lastSent.sent_at!).toLocaleString("en-GB")}.</div> : null}
+      {sendState.sent ? <div className="notice" role="status">Reviews sent to author. The email was accepted for sending and the chapter's send record has been saved.</div> : null}
+      {sendState.error ? <div className="notice" role="alert">{sendState.error}</div> : null}
       {completedAssignments.length ? completedAssignments.map((assignment, index) => {
         const review = assignment.peer_reviews?.[0];
         const reviewer = singleRecord(assignment.reviewer);
@@ -1595,7 +1611,7 @@ function PeerReviewPacketEditor({
           </article>
         );
       }) : <p className="muted">No completed peer reviews are available for this chapter yet.</p>}
-      <button className="primary" disabled={!completedAssignments.length} type="submit">Send selected anonymised reviews to author</button>
+      <button className={`primary notify-button ${sending ? "sending" : ""} ${sendState.sent ? "reviews-sent" : ""}`} disabled={!completedAssignments.length || sending || sendState.sent} type="submit">{sending ? "Sending reviews..." : sendState.sent ? "Reviews sent" : "Send selected anonymised reviews to author"}</button>
     </form>
   );
 }
